@@ -1,5 +1,7 @@
 # TheBrain Open
 
+[![GitHub](https://img.shields.io/github/stars/maryasov/the-brain?style=social)](https://github.com/maryasov/the-brain)
+
 A **free, open-source, local-first** desktop alternative to [TheBrain](https://thebrain.com/).
 
 The signature feature this project reproduces is **focus-driven navigation**: every
