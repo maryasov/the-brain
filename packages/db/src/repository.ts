@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
+import { buildOpml, parseOpml, type OpmlNode } from '@the-brain/core'
 import {
   rowToAttachment,
   rowToLink,
@@ -8,9 +9,11 @@ import {
   type AddAttachmentInput,
   type Attachment,
   type AttachmentRow,
+  type BrainExport,
   type CreateSetInput,
   type CreateThoughtInput,
   type DeleteOptions,
+  type ImportResult,
   type Link,
   type LinkInput,
   type LinkRow,
@@ -26,7 +29,17 @@ import {
   type UpdateThoughtInput
 } from '@the-brain/shared'
 
-const now = () => Date.now()
+/**
+ * Monotonic clock: Date.now() has 1ms resolution, so several writes in one
+ * millisecond would tie `updated_at DESC` orderings (recent list, default set
+ * results). Handing out strictly increasing values keeps those stable.
+ */
+let lastTs = 0
+const now = () => {
+  const t = Date.now()
+  lastTs = t > lastTs ? t : lastTs + 1
+  return lastTs
+}
 
 /**
  * Thin, synchronous repository over better-sqlite3. All logic beyond plain
@@ -415,6 +428,162 @@ export class Repository {
       .get() as ThoughtRow | undefined
     if (existing) return rowToThought(existing)
     return this.createThought({ name: 'My Brain' })
+  }
+
+  // ---- export / import ---------------------------------------------------
+
+  /** A full, portable JSON snapshot of every persisted record. */
+  exportJson(): BrainExport {
+    const thoughts = (this.db.prepare('SELECT * FROM thoughts ORDER BY created_at, id').all() as ThoughtRow[]).map(rowToThought)
+    const links = (this.db.prepare('SELECT * FROM links ORDER BY created_at, id').all() as LinkRow[]).map(rowToLink)
+    const tags = this.db.prepare('SELECT id, name FROM tags ORDER BY name').all() as Tag[]
+    const thoughtTags = this.db
+      .prepare('SELECT thought_id AS thoughtId, tag_id AS tagId FROM thought_tags ORDER BY thought_id, tag_id')
+      .all() as Array<{ thoughtId: string; tagId: string }>
+    const attachments = (this.db.prepare('SELECT * FROM attachments ORDER BY created_at, id').all() as AttachmentRow[]).map(rowToAttachment)
+    const sets = (this.db.prepare('SELECT * FROM sets ORDER BY created_at, id').all() as ThoughtSetRow[]).map(rowToSet)
+    return {
+      version: 1,
+      exportedAt: now(),
+      generator: 'the-brain-open',
+      thoughts,
+      links,
+      tags,
+      thoughtTags,
+      attachments,
+      sets
+    }
+  }
+
+  /** Merge a JSON snapshot back in (idempotent: rows with known ids are kept). */
+  importJson(data: BrainExport): ImportResult {
+    const res: ImportResult = { format: 'json', thoughts: 0, links: 0, tags: 0, attachments: 0, sets: 0 }
+    const tx = this.db.transaction(() => {
+      const insThought = this.db.prepare(
+        `INSERT OR IGNORE INTO thoughts (id, name, description, color, type, pinned, archived, created_at, updated_at)
+         VALUES (@id, @name, @description, @color, @type, @pinned, @archived, @created_at, @updated_at)`
+      )
+      for (const t of data.thoughts ?? []) {
+        res.thoughts += insThought.run({
+          id: t.id,
+          name: t.name,
+          description: t.description ?? null,
+          color: t.color ?? null,
+          type: t.type ?? null,
+          pinned: t.pinned ? 1 : 0,
+          archived: t.archived ? 1 : 0,
+          created_at: t.createdAt,
+          updated_at: t.updatedAt
+        }).changes
+      }
+      const insLink = this.db.prepare(
+        'INSERT OR IGNORE INTO links (id, from_id, to_id, type, created_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      for (const l of data.links ?? []) {
+        res.links += insLink.run(l.id, l.fromId, l.toId, l.type, l.createdAt).changes
+      }
+      const insTag = this.db.prepare('INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)')
+      for (const tag of data.tags ?? []) res.tags += insTag.run(tag.id, tag.name).changes
+      const insMap = this.db.prepare('INSERT OR IGNORE INTO thought_tags (thought_id, tag_id) VALUES (?, ?)')
+      for (const m of data.thoughtTags ?? []) insMap.run(m.thoughtId, m.tagId)
+      const insAtt = this.db.prepare(
+        'INSERT OR IGNORE INTO attachments (id, thought_id, kind, uri, label, mime, created_at) VALUES (@id, @thought_id, @kind, @uri, @label, @mime, @created_at)'
+      )
+      for (const a of data.attachments ?? []) {
+        res.attachments += insAtt.run({
+          id: a.id,
+          thought_id: a.thoughtId,
+          kind: a.kind,
+          uri: a.uri,
+          label: a.label ?? null,
+          mime: a.mime ?? null,
+          created_at: a.createdAt
+        }).changes
+      }
+      const insSet = this.db.prepare(
+        'INSERT OR IGNORE INTO sets (id, name, description, def_json, created_at, updated_at) VALUES (@id, @name, @description, @def_json, @created_at, @updated_at)'
+      )
+      for (const s of data.sets ?? []) {
+        res.sets += insSet.run({
+          id: s.id,
+          name: s.name,
+          description: s.description ?? null,
+          def_json: JSON.stringify(s.def ?? {}),
+          created_at: s.createdAt,
+          updated_at: s.updatedAt
+        }).changes
+      }
+    })
+    tx()
+    return res
+  }
+
+  /** The parent→child hierarchy as an OPML outline (tree; cycle-safe). */
+  exportOpml(): string {
+    const thoughts = this.db.prepare('SELECT id, name FROM thoughts ORDER BY name').all() as Array<{
+      id: string
+      name: string
+    }>
+    const nameById = new Map(thoughts.map((t) => [t.id, t.name]))
+    const childLinks = this.db
+      .prepare("SELECT from_id AS parentId, to_id AS childId FROM links WHERE type = 'child'")
+      .all() as Array<{ parentId: string; childId: string }>
+    const kids = new Map<string, string[]>()
+    const hasParent = new Set<string>()
+    for (const { parentId, childId } of childLinks) {
+      let list = kids.get(parentId)
+      if (!list) {
+        list = []
+        kids.set(parentId, list)
+      }
+      list.push(childId)
+      hasParent.add(childId)
+    }
+    const visited = new Set<string>()
+    const build = (id: string): OpmlNode => {
+      visited.add(id)
+      const children = (kids.get(id) ?? []).filter((c) => !visited.has(c)).map(build)
+      return { name: nameById.get(id) ?? 'Untitled', children }
+    }
+    const roots = thoughts.filter((t) => !hasParent.has(t.id)).map((t) => build(t.id))
+    for (const t of thoughts) if (!visited.has(t.id)) roots.push(build(t.id))
+    return buildOpml(roots, 'TheBrain export')
+  }
+
+  /**
+   * Import an OPML outline as a thought hierarchy. Names are matched
+   * case-insensitively against existing thoughts (reuse, never duplicate);
+   * when parentId is given, top-level entries hang beneath it.
+   */
+  importOpml(xml: string, parentId?: string): ImportResult {
+    const entries = parseOpml(xml)
+    const res: ImportResult = { format: 'opml', thoughts: 0, links: 0, tags: 0, attachments: 0, sets: 0 }
+    const findByName = this.db.prepare('SELECT id FROM thoughts WHERE name = ? COLLATE NOCASE LIMIT 1')
+    const insThought = this.db.prepare(
+      `INSERT INTO thoughts (id, name, description, color, type, pinned, archived, created_at, updated_at)
+       VALUES (?, ?, NULL, NULL, NULL, 0, 0, ?, ?)`
+    )
+    const insLink = this.db.prepare(
+      "INSERT OR IGNORE INTO links (id, from_id, to_id, type, created_at) VALUES (?, ?, ?, 'child', ?)"
+    )
+    const ts = now()
+    const tx = this.db.transaction(() => {
+      const stack: Array<{ id: string; depth: number }> = []
+      for (const e of entries) {
+        while (stack.length && stack[stack.length - 1].depth >= e.depth) stack.pop()
+        let id = (findByName.get(e.name) as { id: string } | undefined)?.id
+        if (!id) {
+          id = randomUUID()
+          insThought.run(id, e.name, ts, ts)
+          res.thoughts += 1
+        }
+        const parent = stack.length ? stack[stack.length - 1].id : parentId
+        if (parent && parent !== id) res.links += insLink.run(randomUUID(), parent, id, ts).changes
+        stack.push({ id, depth: e.depth })
+      }
+    })
+    tx()
+    return res
   }
 
   // ---- helpers -----------------------------------------------------------

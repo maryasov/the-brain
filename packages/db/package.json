@@ -14,11 +14,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@the-brain/core": "workspace:*",
     "@the-brain/shared": "workspace:*",
     "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {
-    "@the-brain/core": "workspace:*",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",

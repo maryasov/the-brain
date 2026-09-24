@@ -142,6 +142,33 @@ export interface CreateSetInput {
   def: SetDef;
 }
 
+/**
+ * A full portable snapshot of the brain (export/import). JSON with a version
+ * tag so future formats can be detected; ids are preserved, so re-importing
+ * merges instead of duplicating.
+ */
+export interface BrainExport {
+  version: 1;
+  exportedAt: number;
+  generator: string;
+  thoughts: Thought[];
+  links: Link[];
+  tags: Tag[];
+  thoughtTags: Array<{ thoughtId: string; tagId: string }>;
+  attachments: Attachment[];
+  sets: ThoughtSet[];
+}
+
+/** What an import brought in (counts of newly inserted records). */
+export interface ImportResult {
+  format: 'json' | 'opml';
+  thoughts: number;
+  links: number;
+  tags: number;
+  attachments: number;
+  sets: number;
+}
+
 /** Create-request payloads crossing the IPC boundary. */
 export interface CreateThoughtInput {
   name: string;
@@ -235,6 +262,10 @@ export interface BrainApi {
   runSet(id: string): Promise<Thought[]>;
   createSet(input: CreateSetInput): Promise<ThoughtSet>;
   deleteSet(id: string): Promise<void>;
+  /** Native save-dialog export of the whole brain (.json snapshot or .opml outline). */
+  exportBrainFile(): Promise<string | null>;
+  /** Native open-dialog import of a BrainExport JSON or OPML file. */
+  importBrainFile(): Promise<ImportResult | null>;
   setPinned(id: string, pinned: boolean): Promise<Thought>;
   listPinned(): Promise<Thought[]>;
   listTags(thoughtId: string): Promise<Tag[]>;
@@ -272,6 +303,8 @@ export const IPC = {
   runSet: 'brain:runSet',
   createSet: 'brain:createSet',
   deleteSet: 'brain:deleteSet',
+  exportBrainFile: 'brain:exportBrainFile',
+  importBrainFile: 'brain:importBrainFile',
   setPinned: 'brain:setPinned',
   listPinned: 'brain:listPinned',
   listTags: 'brain:listTags',

@@ -1,8 +1,10 @@
-import { ipcMain, shell, type BrowserWindow } from 'electron'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { BrowserWindow, dialog, ipcMain, shell, type SaveDialogOptions } from 'electron'
 import {
   IPC,
   type AddAttachmentInput,
   type Attachment,
+  type BrainExport,
   type CreateSetInput,
   type CreateThoughtInput,
   type DeleteOptions,
@@ -46,6 +48,43 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.runSet, (_e, id: string) => r().runSet(id))
   ipcMain.handle(IPC.createSet, (_e, input: CreateSetInput) => r().createSet(input))
   ipcMain.handle(IPC.deleteSet, (_e, id: string) => r().deleteSet(id))
+
+  // Export / import the whole brain via native file dialogs. Format follows the
+  // chosen file extension: .opml writes/reads the outline, anything else the
+  // full JSON snapshot. Returns the path (export) or an import summary, or null
+  // when the user cancels.
+  ipcMain.handle(IPC.exportBrainFile, async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts: SaveDialogOptions = {
+      title: 'Export brain',
+      defaultPath: 'the-brain.json',
+      filters: [
+        { name: 'Brain JSON snapshot', extensions: ['json'] },
+        { name: 'OPML outline', extensions: ['opml'] }
+      ]
+    }
+    const { canceled, filePath } = win
+      ? await dialog.showSaveDialog(win, opts)
+      : await dialog.showSaveDialog(opts)
+    if (canceled || !filePath) return null
+    const text = filePath.toLowerCase().endsWith('.opml')
+      ? r().exportOpml()
+      : JSON.stringify(r().exportJson(), null, 2)
+    writeFileSync(filePath, text, 'utf8')
+    return filePath
+  })
+  ipcMain.handle(IPC.importBrainFile, async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const filters = [{ name: 'Brain export / OPML', extensions: ['json', 'opml'] }]
+    const picked = win
+      ? await dialog.showOpenDialog(win, { title: 'Import brain', properties: ['openFile'], filters })
+      : await dialog.showOpenDialog({ title: 'Import brain', properties: ['openFile'], filters })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const file = picked.filePaths[0]
+    const text = readFileSync(file, 'utf8')
+    if (file.toLowerCase().endsWith('.opml')) return r().importOpml(text, r().getOrCreateRoot().id)
+    return r().importJson(JSON.parse(text) as BrainExport)
+  })
   ipcMain.handle(IPC.setPinned, (_e, id: string, pinned: boolean) => r().setPinned(id, pinned))
   ipcMain.handle(IPC.listPinned, () => r().listPinned())
   ipcMain.handle(IPC.listTags, (_e, thoughtId: string) => r().listTags(thoughtId))

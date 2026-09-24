@@ -4,6 +4,7 @@ import { openRepository, callAppRpc } from '@the-brain/db'
 import { computeViewport } from '@the-brain/core'
 import type {
   AttachmentKind,
+  BrainExport,
   CreateSetInput,
   CreateThoughtInput,
   LinkType,
@@ -86,6 +87,10 @@ async function route(
             'GET /sets/:id/thoughts',
             'POST /sets',
             'DELETE /sets/:id',
+            'GET /export',
+            'GET /export/opml',
+            'POST /import',
+            'POST /import/opml',
             'GET /tags/:thoughtId',
             'GET /attachments/:thoughtId',
             'POST /thoughts',
@@ -134,6 +139,7 @@ async function route(
       return { status: 200, data: repo.listAttachments(second) }
     if (head === 'state' && !second)
       return { status: 200, data: { focus: repo.getAppState('focus') } }
+    if (head === 'export' && !second) return { status: 200, data: repo.exportJson() }
   }
 
   // ---- writes ----
@@ -183,6 +189,22 @@ async function route(
   if (method === 'DELETE' && head === 'sets' && second) {
     repo.deleteSet(second)
     return { status: 200, data: { ok: true } }
+  }
+  // Import a full JSON snapshot (merged by id; nothing is deleted). The body is
+  // exactly what GET /export returns.
+  if (method === 'POST' && head === 'import' && !second) {
+    const doc = body as unknown as BrainExport
+    if (!Array.isArray(doc.thoughts))
+      return { status: 400, data: { error: 'import body must be a BrainExport JSON (missing thoughts[])' } }
+    return { status: 200, data: repo.importJson(doc) }
+  }
+  // Import an OPML outline as a thought hierarchy under parentId (default:
+  // root). Existing thought names are reused, never duplicated.
+  if (method === 'POST' && head === 'import' && second === 'opml') {
+    const xml = asStr(body.xml)
+    if (!xml) return { status: 400, data: { error: 'body.xml required' } }
+    const parentId = asStr(body.parentId) ?? repo.getOrCreateRoot().id
+    return { status: 200, data: repo.importOpml(xml, parentId) }
   }
   if (method === 'POST' && head === 'links') {
     return {
@@ -258,6 +280,16 @@ const server = createServer(async (req, res) => {
         ? await readBody(req)
         : {}
     const segments = url.pathname.split('/').filter(Boolean)
+    // Text routes that must not be JSON-wrapped: the OPML export.
+    if (method === 'GET' && segments[0] === 'export' && segments[1] === 'opml') {
+      const xml = repo.exportOpml()
+      res.writeHead(200, {
+        'Content-Type': 'text/x-opml; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="the-brain.opml"',
+        'Access-Control-Allow-Origin': '*'
+      })
+      return res.end(xml)
+    }
     // Binary convenience route: raw PNG straight from the desktop window.
     if (method === 'GET' && segments[0] === 'app' && segments[1] === 'screenshot') {
       const shot = (await callAppRpc(repo, 'screenshot')) as { pngBase64: string }

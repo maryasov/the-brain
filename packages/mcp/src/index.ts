@@ -6,6 +6,7 @@ import { openRepository, callAppRpc } from '@the-brain/db'
 import { computeViewport } from '@the-brain/core'
 import type {
   AttachmentKind,
+  BrainExport,
   CreateThoughtInput,
   DeleteOptions,
   LinkType,
@@ -115,6 +116,43 @@ const TOOLS = [
       type: 'object',
       properties: { setId: { type: 'string' } },
       required: ['setId']
+    }
+  },
+  {
+    name: 'brain_export',
+    description:
+      'Export a full portable JSON snapshot of the brain (thoughts, links, tags, attachments, filtered sets). Feed it to brain_import_json elsewhere; nothing is modified.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_export_opml',
+    description:
+      'Export the parent→child hierarchy as OPML 2.0 outline text (TheBrain-compatible exchange format). Returns the raw document.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'brain_import_json',
+    description:
+      'Merge a brain_export JSON snapshot into this brain. Ids are preserved, known records are skipped, nothing is deleted. Returns counts of newly imported records.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        document: { type: 'object', description: 'A BrainExport snapshot (from brain_export)' }
+      },
+      required: ['document']
+    }
+  },
+  {
+    name: 'brain_import_opml',
+    description:
+      'Import an OPML outline as a thought hierarchy. Existing thought names are reused (case-insensitive), never duplicated; top-level entries hang under parentId (default: the root thought). Returns counts of what was created.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        xml: { type: 'string', description: 'The OPML document text' },
+        parentId: { type: 'string', description: 'Thought to nest top-level entries under (optional)' }
+      },
+      required: ['xml']
     }
   },
   {
@@ -349,6 +387,21 @@ async function handle(name: string, a: Args): Promise<unknown> {
       return repo.runSet(str(a, 'setId'))
     case 'brain_delete_set':
       return repo.deleteSet(str(a, 'setId')), { ok: true }
+    case 'brain_export':
+      return repo.exportJson()
+    case 'brain_export_opml':
+      return { __text: repo.exportOpml() }
+    case 'brain_import_json': {
+      const doc = a.document as BrainExport
+      if (!doc || typeof doc !== 'object' || !Array.isArray(doc.thoughts))
+        throw new Error('document must be a BrainExport snapshot (missing thoughts[])')
+      return repo.importJson(doc)
+    }
+    case 'brain_import_opml':
+      return repo.importOpml(
+        str(a, 'xml'),
+        optStr(a, 'parentId') ?? repo.getOrCreateRoot().id
+      )
     case 'brain_navigate': {
       const nb = repo.getNeighborhood(str(a, 'focusId'))
       return nb ? computeViewport(nb) : null
@@ -443,6 +496,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const args = (req.params.arguments ?? {}) as Args
   try {
     const result = await handle(name, args)
+    // Tools that must return a raw document (e.g. brain_export_opml) wrap it
+    // in { __text } so agents get the file content, not a JSON-escaped string.
+    const raw = (result as { __text?: string })?.__text
+    if (typeof raw === 'string') {
+      return { content: [{ type: 'text', text: raw }] }
+    }
     // brain_app_screenshot returns { screenshot: {pngBase64,…} }: hand the
     // agent a real MCP image content block instead of a wall of base64.
     const shot = (result as { screenshot?: { pngBase64: string; width: number; height: number } })

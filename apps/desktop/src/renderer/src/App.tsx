@@ -180,6 +180,20 @@ export function App() {
           Delete
         </button>
         <button
+          className="btn"
+          onClick={() => void useBrain.getState().exportBrain()}
+          title="Export the whole brain (JSON snapshot or OPML outline) to a file"
+        >
+          Export
+        </button>
+        <button
+          className="btn"
+          onClick={() => void useBrain.getState().importBrain()}
+          title="Import a JSON snapshot or OPML outline (merged, nothing is deleted)"
+        >
+          Import
+        </button>
+        <button
           className={setsOpen ? 'btn on' : 'btn'}
           onClick={() => useBrain.getState().toggleSets()}
           title="Filtered sets (S)"

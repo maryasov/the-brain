@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   Attachment,
   AttachmentKind,
+  ImportResult,
   LinkType,
   Neighborhood,
   SetDef,
@@ -61,6 +62,8 @@ interface BrainState {
   createSet(name: string, def: SetDef): Promise<void>
   deleteSet(id: string): Promise<void>
   runSet(id: string | null): Promise<void>
+  exportBrain(): Promise<string | null>
+  importBrain(): Promise<ImportResult | null>
   openDialog(kind: DialogKind | null): void
   saveThought(patch: {
     name?: string
@@ -281,6 +284,26 @@ export const useBrain = create<BrainState>((set, get) => ({
   async runSet(id) {
     if (!id) return set({ activeSetId: null, setResults: [] })
     set({ activeSetId: id, setResults: await window.brain.runSet(id) })
+  },
+
+  // ---- export / import -----------------------------------------------------
+
+  // Native save-dialog export of the whole brain; returns the written path or
+  // null when cancelled. Pure human path (the API/MCP export the same data).
+  async exportBrain() {
+    return window.brain.exportBrainFile()
+  },
+
+  // Native open-dialog import; on success refresh every view so the newly
+  // merged thoughts/sets/tags show up without a manual reload.
+  async importBrain() {
+    const res = await window.brain.importBrainFile()
+    if (res) {
+      await get().refreshPinned()
+      await get().refreshSets()
+      await get().reload()
+    }
+    return res
   },
 
   openDialog(kind) {

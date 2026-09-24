@@ -260,4 +260,75 @@ describe('Repository', () => {
     expect(shallow.thoughts.map((t) => t.id).sort()).toEqual([a.id, b.id, c.id].sort())
     expect(repo.getSubgraph('nope', 2)).toBeNull()
   })
+
+  it('export/import JSON: full snapshot restores a fresh DB and is idempotent', () => {
+    const root = repo.getOrCreateRoot()
+    const ada = repo.createThought({ name: 'Ada', parentId: root.id, type: 'person' })
+    repo.createThought({ name: 'Graph Theory', parentId: root.id, type: 'book' })
+    repo.link({ fromId: ada.id, toId: root.id, type: 'jump' })
+    repo.addTag(ada.id, 'people')
+    repo.addAttachment({ thoughtId: ada.id, kind: 'url', uri: 'https://example.com' })
+    repo.createSet({ name: 'People', def: { type: 'person' } })
+
+    const snapshot = repo.exportJson()
+    expect(snapshot.version).toBe(1)
+    expect(snapshot.thoughts).toHaveLength(3)
+    expect(snapshot.links.length).toBeGreaterThanOrEqual(3) // 2 child + 1 jump
+    expect(snapshot.tags).toHaveLength(1)
+    expect(snapshot.attachments).toHaveLength(1)
+    expect(snapshot.sets).toHaveLength(1)
+
+    const target = freshRepo()
+    const res = target.importJson(snapshot)
+    expect(res.format).toBe('json')
+    expect(res.thoughts).toBe(3)
+    expect(res.links).toBeGreaterThanOrEqual(3)
+    expect(res.tags).toBe(1)
+    expect(res.attachments).toBe(1)
+    expect(res.sets).toBe(1)
+    // Round-trips: exporting the target yields the same record set.
+    const again = target.exportJson()
+    expect(again.thoughts.map((t) => t.id).sort()).toEqual(
+      snapshot.thoughts.map((t) => t.id).sort()
+    )
+    // Idempotent: re-importing changes nothing.
+    const dupe = target.importJson(snapshot)
+    expect(dupe.thoughts).toBe(0)
+    expect(dupe.links).toBe(0)
+    expect(dupe.sets).toBe(0)
+    // Imported set definition survived and still runs.
+    const importedSet = target.listSets()[0]
+    expect(target.runSet(importedSet.id).map((t) => t.name)).toEqual(['Ada'])
+  })
+
+  it('export/import OPML: hierarchy survives a round-trip with name reuse', () => {
+    const root = repo.getOrCreateRoot()
+    const sci = repo.createThought({ name: 'Science', parentId: root.id })
+    const math = repo.createThought({ name: 'Math', parentId: sci.id })
+    repo.createThought({ name: 'Physics', parentId: sci.id })
+    repo.createThought({ name: 'Calculus', parentId: math.id })
+
+    const xml = repo.exportOpml()
+    expect(xml).toContain('<opml version="2.0">')
+    expect(xml).toContain('text="Physics"')
+    expect(xml).toContain('text="Calculus"')
+
+    // Import into the same DB: every name already exists, so only links may be
+    // added and thoughts must not be recreated.
+    const res = repo.importOpml(xml)
+    expect(res.format).toBe('opml')
+    expect(res.thoughts).toBe(0) // all reused by name
+
+    // Import into a fresh DB under a chosen parent builds the whole tree.
+    const target = freshRepo()
+    const targetRoot = target.getOrCreateRoot()
+    const built = target.importOpml(xml, targetRoot.id)
+    expect(built.thoughts).toBe(4) // Science/Math/Calculus/Physics (My Brain reused)
+    const vp = computeViewport(target.getNeighborhood(targetRoot.id)!)
+    expect(vp.children.map((t) => t.name)).toEqual(['Science'])
+    // Science is the hub: Math + Physics hang off it; Calculus off Math.
+    const science = target.search('Science')[0]
+    const svp = computeViewport(target.getNeighborhood(science.id)!)
+    expect(svp.children.map((t) => t.name).sort()).toEqual(['Math', 'Physics'])
+  })
 })

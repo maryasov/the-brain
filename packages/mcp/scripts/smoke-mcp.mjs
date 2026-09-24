@@ -100,6 +100,20 @@ console.log(
   rpc.isError ? 'brain_app_rpc: no desktop (ok in headless smoke)' : 'brain_app_rpc ping: ok'
 )
 
+// Export/import: JSON snapshot round-trip (idempotent re-import) + OPML outline.
+const snapshot = await call('brain_export', {})
+console.log('export snapshot: v' + snapshot.version, 'thoughts:', snapshot.thoughts.length)
+const noop = await call('brain_import_json', { document: snapshot })
+console.log('json re-import no-op:', noop.thoughts === 0 && noop.links === 0)
+const opmlRes = await client.callTool({ name: 'brain_export_opml', arguments: {} })
+const opml = opmlRes.content[0].text // raw document, not JSON
+console.log(
+  'opml export ok:',
+  opml.includes('<opml version="2.0"') && opml.includes('Smoke Child')
+)
+const reOpml = await call('brain_import_opml', { xml: opml })
+console.log('opml re-import reuses names:', reOpml.thoughts === 0)
+
 await call('brain_delete_thought', { id: created.id, mode: 'cascade' })
 const after = await call('brain_get_thought', { id: created.id })
 console.log('deleted ok:', after === null)

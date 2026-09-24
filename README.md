@@ -40,6 +40,10 @@ animates the whole map, so you think in relationships instead of folders.
   newest first, with relative ages.
 - **Filtered sets**: save a search (text / type / tag, AND-ed) as a named set —
   run it in the Sets panel and click any hit to focus it.
+- **Export / import**: snapshot the whole brain to portable JSON (thoughts,
+  links, tags, attachments, sets) or exchange the parent→child hierarchy as an
+  **OPML** outline — from the toolbar (native file dialog), the HTTP API, or MCP.
+  Imports merge by id/name, so nothing is ever duplicated or destroyed.
 - **Create from zones**: click a gate on the focus box — or any empty spot in
   the parent/child/jump/sibling zone — and the new thought is born already
   linked in that direction.
@@ -128,6 +132,7 @@ pnpm api           # start the HTTP JSON API on 127.0.0.1:8788
 | Timeline (recent)     | Toolbar `Recent` or `T` — click a row to focus it                      |
 | Minimap               | Bottom-right 2-hop overview; click a dot to focus that thought         |
 | Filtered sets         | Toolbar `Sets` or `S` — save/run/delete named searches (text/type/tag)  |
+| Export / import       | Toolbar `Export` / `Import` — JSON snapshot or OPML outline via native file dialog |
 | Tag the focus         | Top-right tag field                                                   |
 
 ## Data model (SQLite)
@@ -195,7 +200,7 @@ SQLite file.
 
 ### MCP server (`packages/mcp`)
 
-A stdio Model Context Protocol server with 28 tools: `brain_get_root`,
+A stdio Model Context Protocol server with 32 tools: `brain_get_root`,
 `brain_get_thought`, `brain_get_neighborhood`, `brain_list_recent` (timeline),
 `brain_get_subgraph` (minimap data: the depth-hop neighborhood around a
 thought), `brain_navigate` (returns the
@@ -205,8 +210,9 @@ UI would show"), `brain_search`, `brain_list_pinned`, `brain_list_tags`,
 (`detach` or `cascade`), `brain_link`, `brain_unlink`, `brain_set_pinned`,
 `brain_add_tag`, `brain_remove_tag`, `brain_list_attachments`,
 `brain_add_attachment`, `brain_remove_attachment`, `brain_list_sets`,
-`brain_create_set`, `brain_run_set`, `brain_delete_set` (filtered sets) — plus
-the app-control tools
+`brain_create_set`, `brain_run_set`, `brain_delete_set` (filtered sets),
+`brain_export`, `brain_export_opml`, `brain_import_json`, `brain_import_opml`
+(export / import) — plus the app-control tools
 `brain_get_app_state`, `brain_set_app_focus`, `brain_app_rpc` and
 `brain_app_screenshot` (see *Driving the running app*).
 
@@ -237,6 +243,8 @@ curl localhost:8788/   # prints the endpoint index
 | Tags  | `POST /tags` · `DELETE /tags` (body: `{thoughtId,name}` / `{thoughtId,tagId}`)                                       |
 | Attach | `POST /attachments` (body: `{thoughtId,kind,uri,label?}`) · `DELETE /attachments` (body: `{thoughtId,id}`)         |
 | Sets  | `POST /sets` (body: `{name,def:{text?,type?,tag?}}`) · `DELETE /sets/:id`                                          |
+| Export | `GET /export` (JSON snapshot) · `GET /export/opml` (raw OPML text)                                                  |
+| Import | `POST /import` (body: a `/export` snapshot, merged by id) · `POST /import/opml` (body: `{xml,parentId?}`)          |
 | App   | `GET /state` · `PUT /state/focus` (body: `{id}`) · `POST /app/rpc` · `GET /app/screenshot` (raw PNG)                 |
 
 `GET /viewport/:id` is the agent-friendly projection of the focus view: the
@@ -284,7 +292,7 @@ node packages/api/scripts/smoke-api.mjs   # CRUD + viewport + search over HTTP
 
 Not yet built (tracked as post-MVP backlog): the force-directed global
 "overview" map, a richer attachment/anchor viewer, multi-device sync, a
-plugin/scripting API, AI integrations, and OPML/JSON import-export.
+plugin/scripting API, and AI integrations.
 
 ## Notes & known limitations
 
@@ -299,6 +307,12 @@ plugin/scripting API, AI integrations, and OPML/JSON import-export.
   open inside Electron 33** (dlopen never returns), and v11 cannot compile
   against Node 26 V8 headers. After major Node or Electron upgrades, re-run
   `pnpm install` and `pnpm --filter @the-brain/desktop run rebuild`.
+- Keep each copy on its own ABI: if the desktop app throws
+  `NODE_MODULE_VERSION …` (or the API throws `ERR_DLOPEN_FAILED`), a blanket
+  `pnpm rebuild better-sqlite3` rebuilt *both* copies for one runtime. Fix it
+  per-scope instead — `pnpm --filter @the-brain/desktop rebuild` restores the
+  Electron build (`^11`), `pnpm --filter @the-brain/db rebuild` restores the
+  Node build (`^12`); neither disturbs the other.
 - Add a `apps/desktop/resources/icon.png` (512×512) for polished package icons
   before running `pnpm dist`.
 - The app is a GUI and needs a display; CI-style headless environments can run

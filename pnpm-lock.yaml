@@ -322,6 +322,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@the-brain/core':
+        specifier: workspace:*
+        version: link:../core
       '@the-brain/shared':
         specifier: workspace:*
         version: link:../shared
@@ -329,9 +332,6 @@ importers:
         specifier: ^12.11.1
         version: 12.11.1
     devDependencies:
-      '@the-brain/core':
-        specifier: workspace:*
-        version: link:../core
       '@types/better-sqlite3':
         specifier: ^7.6.12
         version: 7.6.13
