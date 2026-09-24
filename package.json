@@ -1,0 +1,33 @@
+{
+  "name": "the-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A free, local-first, open-source clone of TheBrain focused on dynamic-grid thought navigation.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "dev": "pnpm --filter @the-brain/desktop dev",
+    "build": "pnpm --filter @the-brain/desktop build",
+    "start": "pnpm --filter @the-brain/desktop start",
+    "rebuild": "pnpm --filter @the-brain/desktop rebuild",
+    "mcp": "pnpm --filter @the-brain/mcp start",
+    "api": "pnpm --filter @the-brain/api start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "dist": "pnpm --filter @the-brain/desktop dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@the-brain/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "author": "The Brain contributors",
+  "description": "Desktop app: a free, local-first clone of TheBrain focused on dynamic-grid thought navigation.",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "dist": "electron-vite build && electron-builder"
+  },
+  "dependencies": {
+    "@the-brain/core": "workspace:*",
+    "@the-brain/db": "workspace:*",
+    "@the-brain/shared": "workspace:*",
+    "better-sqlite3": "^11.10.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "vite": "^5.4.11"
+  }
+}

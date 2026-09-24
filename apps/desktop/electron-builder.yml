@@ -1,0 +1,43 @@
+# electron-builder configuration for @the-brain/desktop
+# Build the bundles first (`electron-vite build`), then run `electron-builder`.
+appId: dev.thebrain.open
+productName: TheBrain Open
+copyright: Copyright © 2026 The Brain contributors
+
+directories:
+  output: release
+  buildResources: resources
+
+# electron-vite emits everything the app needs into ./out
+files:
+  - out/**
+  - package.json
+
+# better-sqlite3 ships a native .node binary that must stay outside the asar
+# so Node/Electron can dlopen it at runtime.
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+
+# electron-builder recompiles native deps against the target Electron ABI.
+npmRebuild: true
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  maintainer: thebrain-open
+  # Provide resources/icon.png (512x512) for polished package icons.
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
