@@ -915,3 +915,89 @@ button {
   align-self: flex-start;
   font-size: 12px;
 }
+
+/* ---- hover card (canvas tooltip) ---------------------------------------- */
+.thought-tip {
+  position: fixed;
+  z-index: 60;
+  width: 264px;
+  pointer-events: none;
+  background: #151b26f2;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 28px #00000066;
+  backdrop-filter: blur(6px);
+}
+
+.thought-tip .tt-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.thought-tip .tt-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.thought-tip .tt-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thought-tip .tt-pin {
+  color: var(--sibling);
+  font-size: 12px;
+}
+
+.thought-tip .tt-meta {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.thought-tip .tt-desc {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #c7d1df;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.thought-tip .tt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.thought-tip .tt-tag {
+  font-size: 10px;
+  color: var(--parent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.thought-tip .tt-counts {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.thought-tip .tt-count.on {
+  color: var(--text);
+}

@@ -23,6 +23,7 @@ import {
   type SetDef,
   type Tag,
   type Thought,
+  type ThoughtCard,
   type ThoughtRow,
   type ThoughtSet,
   type ThoughtSetRow,
@@ -107,6 +108,57 @@ export class Repository {
     const links = this.linksWithin(scope)
 
     return { focus, thoughts, links }
+  }
+
+  /**
+   * Hover-card view of one thought: text + tag names + counts of everything
+   * around it (parents, children, jumps, siblings, attachments). Siblings are
+   * counted like getNeighborhood derives them: other children of my parents.
+   */
+  getThoughtCard(id: string): ThoughtCard | null {
+    const row = this.db.prepare('SELECT * FROM thoughts WHERE id = ?').get(id) as
+      | ThoughtRow
+      | undefined
+    if (!row) return null
+    const thought = rowToThought(row)
+    const count = (sql: string, ...params: Array<string | number>): number =>
+      (this.db.prepare(sql).get(...params) as { n: number }).n
+    const tags = this.db
+      .prepare(
+        `SELECT t.name FROM tags t
+           JOIN thought_tags tt ON tt.tag_id = t.id
+          WHERE tt.thought_id = ?
+          ORDER BY t.name`
+      )
+      .all(id) as Array<{ name: string }>
+    return {
+      id: thought.id,
+      name: thought.name,
+      type: thought.type,
+      color: thought.color,
+      description: thought.description,
+      pinned: thought.pinned,
+      updatedAt: thought.updatedAt,
+      tags: tags.map((t) => t.name),
+      attachments: count('SELECT COUNT(*) AS n FROM attachments WHERE thought_id = ?', id),
+      counts: {
+        parents: count("SELECT COUNT(*) AS n FROM links WHERE type='child' AND to_id = ?", id),
+        children: count("SELECT COUNT(*) AS n FROM links WHERE type='child' AND from_id = ?", id),
+        jumps: count(
+          "SELECT COUNT(*) AS n FROM links WHERE type='jump' AND (from_id = ? OR to_id = ?)",
+          id,
+          id
+        ),
+        siblings: count(
+          `SELECT COUNT(DISTINCT c.to_id) AS n
+             FROM links p
+             JOIN links c ON c.from_id = p.from_id AND c.type = 'child'
+            WHERE p.type = 'child' AND p.to_id = ? AND c.to_id <> ?`,
+          id,
+          id
+        )
+      }
+    }
   }
 
   search(query: string): SearchHit[] {

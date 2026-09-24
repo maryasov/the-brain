@@ -44,6 +44,8 @@ export function BrainCanvas() {
   const displayRef = useRef<Map<string, Display>>(new Map())
   const dragRef = useRef<Drag | null>(null)
   const suppressClickRef = useRef(false)
+  const hoverIdRef = useRef<string | null>(null)
+  const hoverTimerRef = useRef<number | null>(null)
 
   layoutRef.current = useBrain((s) => s.layout)
   focusRef.current = useBrain((s) => s.focusId)
@@ -196,6 +198,14 @@ export function BrainCanvas() {
     }
   }, [])
 
+  // A focus change moves the whole graph under the cursor: drop any tip.
+  useEffect(() => {
+    if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = null
+    hoverIdRef.current = null
+    useBrain.getState().hideHover()
+  }, [focus])
+
   // Convert a client point to layout coordinates (null if no layout yet).
   const toLayout = (clientX: number, clientY: number): { x: number; y: number } | null => {
     const layout = layoutRef.current
@@ -243,16 +253,45 @@ export function BrainCanvas() {
     return dx < 0 ? ('addJump' as const) : ('addSibling' as const)
   }
 
+  const cancelHover = () => {
+    if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = null
+    hoverIdRef.current = null
+    useBrain.getState().hideHover()
+  }
+
   return (
     <canvas
       ref={canvasRef}
       className="brain-canvas"
       onMouseMove={(e) => {
-        const over = hitTest(e.clientX, e.clientY) || zoneAt(e.clientX, e.clientY)
-        e.currentTarget.style.cursor = over ? 'pointer' : 'default'
+        const { clientX, clientY } = e
+        const nodeId = hitTest(clientX, clientY)
+        e.currentTarget.style.cursor = nodeId || zoneAt(clientX, clientY) ? 'pointer' : 'default'
+
+        // Hover card: appears after a short dwell on one node, follows the
+        // cursor while parked there, and never competes with a link drag.
+        if (nodeId !== hoverIdRef.current) {
+          if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
+          hoverTimerRef.current = null
+          hoverIdRef.current = nodeId
+          useBrain.getState().hideHover()
+          if (nodeId && !dragRef.current) {
+            hoverTimerRef.current = window.setTimeout(() => {
+              hoverTimerRef.current = null
+              void useBrain.getState().showHover(nodeId, clientX + 16, clientY + 18)
+            }, 350)
+          }
+        } else if (nodeId && useBrain.getState().hoverTip) {
+          useBrain.setState((s) =>
+            s.hoverTip ? { hoverTip: { ...s.hoverTip, x: clientX + 16, y: clientY + 18 } } : {}
+          )
+        }
       }}
+      onMouseLeave={cancelHover}
       onMouseDown={(e) => {
         if (e.button !== 0) return
+        cancelHover()
         const fromId = hitTest(e.clientX, e.clientY)
         if (!fromId) return
         const canvas = canvasRef.current!
@@ -299,6 +338,7 @@ export function BrainCanvas() {
           suppressClickRef.current = false
           return
         }
+        cancelHover()
         const id = hitTest(e.clientX, e.clientY)
         if (id) {
           if (id !== focusRef.current) void focus(id)

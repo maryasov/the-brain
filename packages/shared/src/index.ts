@@ -169,6 +169,24 @@ export interface ImportResult {
   sets: number;
 }
 
+/**
+ * Hover card for a single thought: everything a canvas tooltip (and agents)
+ * want to show at a glance — text, tags, and surrounding link/attachment
+ * counts without pulling the whole neighborhood.
+ */
+export interface ThoughtCard {
+  id: string;
+  name: string;
+  type: string | null;
+  color: string | null;
+  description: string | null;
+  pinned: boolean;
+  updatedAt: number;
+  tags: string[];
+  attachments: number;
+  counts: { parents: number; children: number; jumps: number; siblings: number };
+}
+
 /** Create-request payloads crossing the IPC boundary. */
 export interface CreateThoughtInput {
   name: string;
@@ -245,6 +263,8 @@ export interface AddAttachmentInput {
 /** The API surface exposed on `window.brain` by the preload script. */
 export interface BrainApi {
   getThought(id: string): Promise<Thought | null>;
+  /** Hover-card data for a thought (description, tags, link counts). */
+  getThoughtCard(id: string): Promise<ThoughtCard | null>;
   getNeighborhood(focusId: string): Promise<Neighborhood | null>;
   createThought(input: CreateThoughtInput): Promise<Thought>;
   updateThought(input: UpdateThoughtInput): Promise<Thought>;
@@ -289,6 +309,7 @@ export interface BrainApi {
 /** IPC channel names. Kept in one place to avoid string drift. */
 export const IPC = {
   getThought: 'brain:getThought',
+  getThoughtCard: 'brain:getThoughtCard',
   getNeighborhood: 'brain:getNeighborhood',
   createThought: 'brain:createThought',
   updateThought: 'brain:updateThought',

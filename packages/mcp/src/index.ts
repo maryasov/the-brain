@@ -47,6 +47,12 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
   },
   {
+    name: 'brain_get_card',
+    description:
+      'Hover card for a thought: description, tags, and parent/child/jump/sibling/attachment counts.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
+  },
+  {
     name: 'brain_get_neighborhood',
     description:
       'Raw 1-hop neighborhood of a focus thought: the focus, all neighbor thoughts, and the links between them.',
@@ -365,6 +371,8 @@ async function handle(name: string, a: Args): Promise<unknown> {
       return repo.getOrCreateRoot()
     case 'brain_get_thought':
       return repo.getThought(str(a, 'id'))
+    case 'brain_get_card':
+      return repo.getThoughtCard(str(a, 'id'))
     case 'brain_get_neighborhood':
       return repo.getNeighborhood(str(a, 'focusId'))
     case 'brain_list_recent':

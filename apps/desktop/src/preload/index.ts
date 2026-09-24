@@ -14,6 +14,7 @@ import {
 
 const api: BrainApi = {
   getThought: (id: string) => ipcRenderer.invoke(IPC.getThought, id),
+  getThoughtCard: (id: string) => ipcRenderer.invoke(IPC.getThoughtCard, id),
   getNeighborhood: (focusId: string) => ipcRenderer.invoke(IPC.getNeighborhood, focusId),
   createThought: (input: CreateThoughtInput) => ipcRenderer.invoke(IPC.createThought, input),
   updateThought: (input: UpdateThoughtInput) => ipcRenderer.invoke(IPC.updateThought, input),

@@ -60,6 +60,16 @@ console.log('type set:', typed.type)
 const untyped = (await j('PATCH', `/thoughts/${created.id}`, { type: null })).data
 console.log('type cleared:', untyped.type === null)
 
+// Hover card (backs the canvas tooltip): text + tags + link counts.
+const card = (await j('GET', `/card/${created.id}`)).data
+console.log(
+  'GET /card ok:',
+  card.name === 'API Child Renamed' && card.tags.includes('api-smoke') &&
+    typeof card.counts.children === 'number',
+  '| counts:',
+  JSON.stringify(card.counts)
+)
+
 // Filtered sets: save a type+tag filter, run it, delete it.
 await j('PATCH', `/thoughts/${created.id}`, { type: 'person' })
 const setsBefore = (await j('GET', '/sets')).data.length

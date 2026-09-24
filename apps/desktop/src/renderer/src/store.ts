@@ -8,7 +8,8 @@ import type {
   SetDef,
   Thought,
   ThoughtSet,
-  Tag
+  Tag,
+  ThoughtCard
 } from '@the-brain/shared'
 import { computeViewport, layoutViewport, ringLayout, type Viewport, type Layout, type RingLayout } from '@the-brain/core'
 
@@ -25,6 +26,19 @@ export type DialogKind =
 
 /** Guard so the remote-focus subscription is installed once. */
 let remoteFocusSubscribed = false
+
+/**
+ * Hover-card state: a tooltip anchored to the cursor (window coordinates),
+ * plus a small cache so re-hovering the same thought is instant. Cleared on
+ * every reload — edits elsewhere must not show up stale.
+ */
+export interface HoverTip {
+  card: ThoughtCard
+  x: number
+  y: number
+}
+const cardCache = new Map<string, ThoughtCard>()
+let hoverToken = 0
 
 interface BrainState {
   focusId: string | null
@@ -48,6 +62,7 @@ interface BrainState {
   inspectorOpen: boolean
   timelineOpen: boolean
   dialog: DialogKind | null
+  hoverTip: HoverTip | null
 
   init(): Promise<void>
   focus(id: string, opts?: { record?: boolean }): Promise<void>
@@ -91,6 +106,8 @@ interface BrainState {
   openAttachment(att: Attachment): Promise<void>
   resolveThought(name: string): Promise<string | null>
   loadAux(id: string): Promise<void>
+  showHover(id: string, x: number, y: number): Promise<void>
+  hideHover(): void
 }
 
 export const useBrain = create<BrainState>((set, get) => ({
@@ -115,6 +132,7 @@ export const useBrain = create<BrainState>((set, get) => ({
   inspectorOpen: false,
   timelineOpen: false,
   dialog: null,
+  hoverTip: null,
 
   async init() {
     try {
@@ -172,6 +190,7 @@ export const useBrain = create<BrainState>((set, get) => ({
   },
 
   async reload() {
+    cardCache.clear()
     const id = get().focusId
     if (!id) return
     const nb = await window.brain.getNeighborhood(id)
@@ -443,6 +462,30 @@ export const useBrain = create<BrainState>((set, get) => ({
     const exact = hits.find((h) => h.name.trim().toLowerCase() === clean)
     if (exact) return exact.id
     return hits.length === 1 ? hits[0].id : null
+  },
+
+  // Hover tooltip. The token makes late arrivals harmless: if the pointer
+  // moved (hideHover / a newer showHover) before the fetch resolved, the
+  // stale card is dropped instead of flashing.
+  async showHover(id, x, y) {
+    const token = ++hoverToken
+    try {
+      let card = cardCache.get(id)
+      if (!card) {
+        const fetched = await window.brain.getThoughtCard(id)
+        if (fetched) cardCache.set(id, fetched)
+        card = fetched ?? undefined
+      }
+      if (!card || token !== hoverToken) return
+      set({ hoverTip: { card, x, y } })
+    } catch {
+      /* tooltip data is best-effort */
+    }
+  },
+
+  hideHover() {
+    hoverToken++
+    if (get().hoverTip) set({ hoverTip: null })
   }
 }))
 
@@ -472,6 +515,7 @@ const debugView = () => {
     activeSetId: s.activeSetId,
     setResults: s.setResults.map((t) => ({ id: t.id, name: t.name, type: t.type })),
     dialog: s.dialog,
+    hoverTip: s.hoverTip ? { id: s.hoverTip.card.id, name: s.hoverTip.card.name } : null,
     focusType: s.viewport?.focus.type,
     recent: s.recent.map((t) => ({ id: t.id, name: t.name, updatedAt: t.updatedAt })),
     minimapNodes: s.minimap?.nodes.length ?? 0,
@@ -605,6 +649,37 @@ window.__brainRpc = async (method: string, args: RpcArgs = {}) => {
       )
       await new Promise((r) => setTimeout(r, 100))
       return { dialog: s().dialog }
+    }
+    case 'hover': {
+      // Debug-only: run a real mousemove over a node's center through the
+      // canvas handlers (and wait past the tooltip delay), so agents can
+      // verify hover cards end to end without any OS mouse input.
+      if (!args.id) {
+        s().hideHover()
+        return { hoverTip: null }
+      }
+      const canvas = document.querySelector('canvas.brain-canvas')
+      const layout = s().layout
+      if (!canvas || !layout) throw new Error('hover: canvas/layout not ready')
+      const n = layout.byId[args.id]
+      if (!n) throw new Error(`hover: node ${args.id} not in current view`)
+      const rect = canvas.getBoundingClientRect()
+      const pad = 120
+      const scale = Math.min(
+        1,
+        (rect.width - pad) / Math.max(1, layout.bounds.width),
+        (rect.height - pad) / Math.max(1, layout.bounds.height)
+      )
+      canvas.dispatchEvent(
+        new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + rect.width / 2 + n.x * scale,
+          clientY: rect.top + rect.height / 2 + n.y * scale
+        })
+      )
+      await new Promise((r) => setTimeout(r, 600)) // 350 ms tooltip delay + fetch
+      return { hoverTip: debugView().hoverTip }
     }
     case 'link': // drag-to-link between two existing thoughts
       if (args.from && args.to)

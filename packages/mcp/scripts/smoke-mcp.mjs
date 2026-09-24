@@ -70,6 +70,15 @@ console.log('type set:', typed.type)
 const untyped = await call('brain_update_thought', { id: created.id, type: '' })
 console.log('type cleared:', untyped.type === null)
 
+// Hover card (backs the canvas tooltip): text + link/attachment counts.
+const card = await call('brain_get_card', { id: created.id })
+console.log(
+  'card ok:',
+  card.name === 'Smoke Child' && typeof card.counts.parents === 'number',
+  '| counts:',
+  JSON.stringify(card.counts)
+)
+
 // Filtered sets: save + run a type filter, then delete the set again.
 await call('brain_update_thought', { id: created.id, type: 'person' })
 const setsBefore = (await call('brain_list_sets', {})).length

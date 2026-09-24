@@ -8,6 +8,7 @@ import { Inspector } from './components/Inspector.js'
 import { Timeline } from './components/Timeline.js'
 import { Minimap } from './components/Minimap.js'
 import { Sets } from './components/Sets.js'
+import { HoverTip } from './components/HoverTip.js'
 
 const PROMPT_META: Record<
   DialogKind,
@@ -262,14 +263,15 @@ export function App() {
         </div>
 
         <div className="hint">
-          Arrows move · Enter focuses · Click a node to jump · Click a gate or empty zone to
-          create · Drag between nodes to link (Shift = parent → child)
+          Arrows move · Enter focuses · Click a node to jump · Hover for a card · Click a gate or
+          empty zone to create · Drag between nodes to link (Shift = parent → child)
         </div>
 
         <Inspector />
         <Timeline />
         <Minimap />
         <Sets />
+        <HoverTip />
 
         {loading && <OverlayMessage text="Loading brain…" />}
         {error && <OverlayMessage text={error} tone="error" />}

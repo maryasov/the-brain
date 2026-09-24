@@ -77,6 +77,7 @@ async function route(
           endpoints: [
             'GET /root',
             'GET /thought/:id',
+            'GET /card/:id',
             'GET /neighborhood/:id',
             'GET /viewport/:id',
             'GET /search?q=',
@@ -114,6 +115,7 @@ async function route(
     if (head === 'health') return { status: 200, data: { ok: true } }
     if (head === 'root') return { status: 200, data: repo.getOrCreateRoot() }
     if (head === 'thought' && second) return { status: 200, data: repo.getThought(second) }
+    if (head === 'card' && second) return { status: 200, data: repo.getThoughtCard(second) }
     if (head === 'neighborhood' && second)
       return { status: 200, data: repo.getNeighborhood(second) }
     if (head === 'viewport' && second) {

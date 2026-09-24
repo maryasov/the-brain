@@ -28,6 +28,7 @@ export function registerIpc(): void {
   const r = () => getRepository()
 
   ipcMain.handle(IPC.getThought, (_e, id: string) => r().getThought(id))
+  ipcMain.handle(IPC.getThoughtCard, (_e, id: string) => r().getThoughtCard(id))
   ipcMain.handle(IPC.getNeighborhood, (_e, focusId: string) => r().getNeighborhood(focusId))
   ipcMain.handle(IPC.createThought, (_e, input: CreateThoughtInput) => r().createThought(input))
   ipcMain.handle(IPC.updateThought, (_e, input: UpdateThoughtInput) => r().updateThought(input))

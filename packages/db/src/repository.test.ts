@@ -55,6 +55,25 @@ describe('Repository', () => {
     expect(vp.siblings).toHaveLength(0)
   })
 
+  it('builds a hover card with tags and link/attachment counts', () => {
+    const root = repo.getOrCreateRoot()
+    const a = repo.createThought({ name: 'A', parentId: root.id, description: 'first note' })
+    repo.createThought({ name: 'B', parentId: root.id }) // sibling of A
+    repo.createThought({ name: 'A1', parentId: a.id }) // child of A
+    repo.link({ fromId: a.id, toId: root.id, type: 'jump' }) // a jump to its own parent still counts
+    repo.addTag(a.id, 'alpha')
+    repo.addTag(a.id, 'notes')
+    repo.addAttachment({ thoughtId: a.id, kind: 'url', uri: 'https://example.com' })
+
+    const card = repo.getThoughtCard(a.id)!
+    expect(card.name).toBe('A')
+    expect(card.description).toBe('first note')
+    expect(card.tags).toEqual(['alpha', 'notes'])
+    expect(card.attachments).toBe(1)
+    expect(card.counts).toEqual({ parents: 1, children: 1, jumps: 1, siblings: 1 })
+    expect(repo.getThoughtCard('missing')).toBeNull()
+  })
+
   it('indexes search and keeps it in sync on rename', () => {
     const root = repo.getOrCreateRoot()
     const t = repo.createThought({ name: 'Photosynthesis', parentId: root.id })

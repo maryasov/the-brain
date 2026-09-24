@@ -49,6 +49,9 @@ animates the whole map, so you think in relationships instead of folders.
   linked in that direction.
 - **Drag-to-link**: drag one thought onto another to associate them (plain =
   jump, Shift = parent → child); a dashed rubber band previews the drop.
+- **Hover cards**: rest the pointer on any thought and a tooltip shows its
+  type, description, tags and the parent/child/jump/sibling/attachment counts
+  of everything around it — the same card via `GET /card/:id` / `brain_get_card`.
 - Full-text search palette (SQLite FTS5) to find and focus any thought.
 - Pinboard for quick jumps, plus per-thought tags.
 - Agent access: MCP server + HTTP API over the same database, including full
@@ -126,6 +129,7 @@ pnpm api           # start the HTTP JSON API on 127.0.0.1:8788
 | Create a sibling      | Click the empty sibling zone (right) — born as the parent's child     |
 | Rename                | Toolbar or `F2`                                                       |
 | Link two thoughts     | Drag a node onto another (plain = jump, Shift = parent → child)        |
+| Peek at a thought     | Hover its node — card with type, description, tags and link counts     |
 | Thought inspector     | Toolbar `Info` or `I` (name / description / color / type / jump via links) |
 | Attach content        | Inspector list/form, or drop files onto the graph (→ focused thought)  |
 | Pin a thought         | Toolbar (appears in the top-left pinboard)                            |
@@ -200,8 +204,8 @@ SQLite file.
 
 ### MCP server (`packages/mcp`)
 
-A stdio Model Context Protocol server with 32 tools: `brain_get_root`,
-`brain_get_thought`, `brain_get_neighborhood`, `brain_list_recent` (timeline),
+A stdio Model Context Protocol server with 33 tools: `brain_get_root`,
+`brain_get_thought`, `brain_get_card` (hover-card data), `brain_get_neighborhood`, `brain_list_recent` (timeline),
 `brain_get_subgraph` (minimap data: the depth-hop neighborhood around a
 thought), `brain_navigate` (returns the
 role-grouped viewport — focus/parents/children/jumps/siblings, i.e. "what the
@@ -236,7 +240,7 @@ pnpm api            # listens on http://127.0.0.1:8788 (PORT / HOST to change)
 curl localhost:8788/   # prints the endpoint index
 ```
 
-| Read  | `GET /root` · `/thought/:id` · `/neighborhood/:id` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
+| Read  | `GET /root` · `/thought/:id` · `/card/:id` · `/neighborhood/:id` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
 | ----- | -------------------------------------------------------------------------------------------------------------------- |
 | Write | `POST /thoughts` · `PATCH /thoughts/:id` · `DELETE /thoughts/:id?mode=detach\|cascade`                               |
 | Links | `POST /links` · `DELETE /links` (body: `{fromId,toId,type}`)                                                         |
@@ -272,7 +276,8 @@ grabbing the pointer:
   `delete_set {setId}` (filtered sets; `run_set` opens the Sets panel), `set_dialog` (open/close
   the create/rename/delete modal), `link`, `sim_drag` (replays a drag gesture
   through the real DOM handlers), `sim_click {dx,dy}` (replays a click offset
-  from a node — verifies gate/zone routing), `add_attachment` /
+  from a node — verifies gate/zone routing), `hover {id}` (replays a mousemove
+  over a node and waits out the tooltip delay; empty id hides it), `add_attachment` /
   `remove_attachment`, `add_child`/`add_parent`/`add_jump`/`add_sibling`,
   `rename`, `delete`, `toggle_pin`, `add_tag`, `remove_tag`). `brain_app_screenshot` /
   `GET /app/screenshot` wrap the screenshot method as an MCP image / raw PNG
