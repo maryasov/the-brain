@@ -554,7 +554,8 @@ const debugView = () => {
         y: Math.round(n.y),
         w: n.w,
         h: n.h,
-        ...(n.hidden ? { hidden: n.hidden } : {})
+        ...(n.hidden ? { hidden: n.hidden } : {}),
+        ...(n.attach ? { attach: n.attach } : {})
       })) ?? null
   }
 }

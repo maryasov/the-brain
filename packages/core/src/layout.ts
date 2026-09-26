@@ -20,6 +20,8 @@ export interface PositionedNode {
   /** TheBrain "More" gates: neighbors linked in each direction that are NOT
    * shown in this viewport (omitted when nothing is hidden). */
   hidden?: { parents: number; children: number; jumps: number }
+  /** Attachment badge: total count and how many are URLs (external arrow). */
+  attach?: { total: number; urls: number }
 }
 
 export interface Point {
@@ -283,6 +285,8 @@ export function layoutViewport(vp: Viewport): Layout {
     if (h && (h.parents.length || h.children.length || h.jumps.length)) {
       n.hidden = { parents: h.parents.length, children: h.children.length, jumps: h.jumps.length }
     }
+    const a = vp.attachCounts[n.id]
+    if (a && a.total > 0) n.attach = { total: a.total, urls: a.urls }
   }
   let minX = Infinity,
     minY = Infinity,

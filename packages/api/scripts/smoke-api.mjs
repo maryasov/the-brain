@@ -106,6 +106,15 @@ console.log(
   (nbG.hidden?.[created.id]?.children ?? []).includes(grand.id) && nbG.hidden?.[root.id] === undefined
 )
 
+// Attachment badges: a URL + a file on the child surface in attachCounts.
+await j('POST', '/attachments', { thoughtId: created.id, kind: 'url', uri: 'https://example.com', label: 'Site' })
+await j('POST', '/attachments', { thoughtId: created.id, kind: 'file', uri: '/tmp/x.pdf', label: 'x' })
+const nbA = (await j('GET', `/neighborhood/${root.id}`)).data
+console.log(
+  'attach badge ok:',
+  nbA.attachCounts?.[created.id]?.total === 2 && nbA.attachCounts[created.id].urls === 1
+)
+
 const tAlive = Date.now()
 const del = await j('DELETE', `/thoughts/${created.id}?mode=cascade`)
 console.log('delete status:', del.status)

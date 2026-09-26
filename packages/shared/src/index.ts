@@ -101,6 +101,14 @@ export interface HiddenCounts {
   jumps: string[];
 }
 
+/** Attachment badge counts for one thought (live views only; the events
+ * journal does not track attachments, so as-of replays omit them). */
+export interface AttachCounts {
+  total: number;
+  /** How many of them are URLs (the renderer draws an external-link arrow). */
+  urls: number;
+}
+
 /**
  * The neighborhood of a focus thought (1-hop, or depth-hop via getSubgraph),
  * as produced by the repository and consumed by the (pure) navigation engine
@@ -114,6 +122,8 @@ export interface Neighborhood {
   links: Link[];
   /** Per-thought off-screen relations, keyed by thought id (1-hop views only). */
   hidden?: Record<string, HiddenCounts>;
+  /** Per-thought attachment badge counts, keyed by thought id (live views). */
+  attachCounts?: Record<string, AttachCounts>;
 }
 
 /**

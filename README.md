@@ -63,6 +63,10 @@ animates the whole map, so you think in relationships instead of folders.
   `hidden` map, also in as-of replays); clicking a dot jumps straight into the
   off-screen thought. Entering thoughts also animate in *from* the neighbor you
   came through instead of popping up at the center.
+- **Attachment badges**: thoughts that carry material (files, URLs, images)
+  show a small count pill on their top-right corner, with a ↗ when one of them
+  is an external link — the numbers come straight from the neighborhood's
+  `attachCounts` map, so API/MCP clients see them too.
 - Full-text search palette (SQLite FTS5) to find and focus any thought.
 - Pinboard for quick jumps, plus per-thought tags.
 - Agent access: MCP server + HTTP API over the same database, including full
@@ -143,7 +147,7 @@ pnpm api           # start the HTTP JSON API on 127.0.0.1:8788
 | Peek at a thought     | Hover its node — card with type, description, tags and link counts     |
 | Follow an off-screen relation | Click the small More-dot on that side of the node (dots = hidden parents/children/jumps) |
 | Thought inspector     | Toolbar `Info` or `I` (name / description / color / type / jump via links) |
-| Attach content        | Inspector list/form, or drop files onto the graph (→ focused thought)  |
+| Attach content        | Inspector list/form, or drop files onto the graph (→ focused thought); attached thoughts show a count badge on their node |
 | Pin a thought         | Toolbar (appears in the top-left pinboard)                            |
 | Timeline (recent)     | Toolbar `Recent` or `T` — click a row to focus it                      |
 | Back in Time          | *Back in time* slider in the Recent dock; `⧖` badge returns to the present (past view is read-only) |
@@ -255,7 +259,7 @@ pnpm api            # listens on http://127.0.0.1:8788 (PORT / HOST to change)
 curl localhost:8788/   # prints the endpoint index
 ```
 
-| Read  | `GET /root` · `/thought/:id` · `/card/:id` · `/neighborhood/:id` (`?t=<ms>` = as of a past time; body carries the `hidden` More-gate map) · `/history/:thoughtId?limit=` · `/earliest` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
+| Read  | `GET /root` · `/thought/:id` · `/card/:id` · `/neighborhood/:id` (`?t=<ms>` = as of a past time; body carries the `hidden` More-gate and `attachCounts` badge maps) · `/history/:thoughtId?limit=` · `/earliest` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
 | ----- | -------------------------------------------------------------------------------------------------------------------- |
 | Write | `POST /thoughts` · `PATCH /thoughts/:id` · `DELETE /thoughts/:id?mode=detach\|cascade`                               |
 | Links | `POST /links` · `DELETE /links` (body: `{fromId,toId,type}`)                                                         |

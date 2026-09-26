@@ -132,6 +132,15 @@ console.log(
     nbG.hidden?.[root.id] === undefined
 )
 
+// Attachment badges: a URL + a file on the child surface in attachCounts.
+await call('brain_add_attachment', { thoughtId: created.id, kind: 'url', uri: 'https://example.com', label: 'Site' })
+await call('brain_add_attachment', { thoughtId: created.id, kind: 'file', uri: '/tmp/x.pdf', label: 'x' })
+const nbA = await call('brain_get_neighborhood', { focusId: root.id })
+console.log(
+  'attach badge ok:',
+  nbA.attachCounts?.[created.id]?.total === 2 && nbA.attachCounts[created.id].urls === 1
+)
+
 const tAlive = Date.now()
 await call('brain_delete_thought', { id: created.id, mode: 'cascade' })
 const after = await call('brain_get_thought', { id: created.id })

@@ -1,4 +1,4 @@
-import type { HiddenCounts, Thought } from '@the-brain/shared'
+import type { AttachCounts, HiddenCounts, Thought } from '@the-brain/shared'
 import type { Neighborhood } from '@the-brain/shared'
 
 /**
@@ -26,6 +26,8 @@ export interface Viewport {
    * the ids of linked thoughts that are NOT shown in this viewport.
    */
   hidden: Record<string, HiddenCounts>
+  /** Attachment badge counts (live views; empty for as-of replays). */
+  attachCounts: Record<string, AttachCounts>
 }
 
 /**
@@ -74,7 +76,8 @@ export function computeViewport(nb: Neighborhood): Viewport {
     jumps: pick(jumpIds),
     siblings: pick(siblingIds),
     intimacy: computeIntimacy(nb),
-    hidden: nb.hidden ?? {}
+    hidden: nb.hidden ?? {},
+    attachCounts: nb.attachCounts ?? {}
   }
 }
 

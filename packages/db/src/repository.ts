@@ -17,6 +17,7 @@ import {
   type DeleteOptions,
   type EventKind,
   type EventRow,
+  type AttachCounts,
   type HiddenCounts,
   type ImportResult,
   type Link,
@@ -118,7 +119,8 @@ export class Repository {
       focus,
       thoughts,
       links: touching.filter((l) => scopeSet.has(l.fromId) && scopeSet.has(l.toId)),
-      hidden: this.hiddenFrom(scopeSet, touching)
+      hidden: this.hiddenFrom(scopeSet, touching),
+      attachCounts: this.attachCountsFor(scope)
     }
   }
 
@@ -851,6 +853,24 @@ export class Repository {
       .prepare(`SELECT * FROM links WHERE from_id IN (${ph}) OR to_id IN (${ph})`)
       .all(...ids, ...ids) as LinkRow[]
     return rows.map(rowToLink)
+  }
+
+  /** Per-thought attachment totals for the canvas badge (live views only). */
+  private attachCountsFor(ids: string[]): Record<string, AttachCounts> {
+    const out: Record<string, AttachCounts> = {}
+    if (!ids.length) return out
+    const ph = ids.map(() => '?').join(',')
+    const rows = this.db
+      .prepare(
+        `SELECT thought_id, kind, COUNT(*) AS n FROM attachments WHERE thought_id IN (${ph}) GROUP BY thought_id, kind`
+      )
+      .all(...ids) as { thought_id: string; kind: string; n: number }[]
+    for (const r of rows) {
+      const c = (out[r.thought_id] ??= { total: 0, urls: 0 })
+      c.total += r.n
+      if (r.kind === 'url') c.urls += r.n
+    }
+    return out
   }
 
   /**

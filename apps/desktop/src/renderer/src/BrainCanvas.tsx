@@ -179,6 +179,14 @@ export function BrainCanvas() {
           if (d) drawMoreDots(ctx, project(d, cx, cy, scale), n)
         }
 
+        // Attachment badges: a count pill on the top-right corner of any
+        // thought that carries material (↗ marks an external link among them).
+        for (const n of layout.nodes) {
+          if (!n.attach) continue
+          const d = disp.get(n.id)
+          if (d) drawAttachBadge(ctx, project(d, cx, cy, scale), n.attach)
+        }
+
         // Drag-to-link rubber band, above the nodes.
         const drag = dragRef.current
         if (drag?.active) {
@@ -545,6 +553,42 @@ function drawMoreDots(ctx: CanvasRenderingContext2D, box: Box, n: PositionedNode
     ctx.stroke()
     ctx.fillStyle = hexA(dt.color, 0.95)
     ctx.fill()
+  }
+  ctx.restore()
+}
+
+/**
+ * Attachment badge (TheBrain marks thoughts that carry material): a small
+ * rounded pill centered on the node's top-right corner showing the count,
+ * plus an ↗ arrow when one of the attachments is an external URL.
+ */
+function drawAttachBadge(
+  ctx: CanvasRenderingContext2D,
+  box: Box,
+  a: { total: number; urls: number }
+): void {
+  const text = String(a.total)
+  ctx.save()
+  ctx.font = '700 9px Inter, system-ui, sans-serif'
+  const arrowW = a.urls > 0 ? 10 : 0
+  const w = 9 + ctx.measureText(text).width + arrowW
+  const h = 13
+  const x = box.cx + box.w / 2
+  const y = box.cy - box.h / 2
+  ctx.beginPath()
+  roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2)
+  ctx.fillStyle = '#0b1119'
+  ctx.fill()
+  ctx.strokeStyle = hexA('#8fb4ff', 0.75)
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.fillStyle = '#dbe3ee'
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'right'
+  ctx.fillText(text, x + w / 2 - (a.urls > 0 ? 11 : 4.5), y + 0.5)
+  if (a.urls > 0) {
+    ctx.textAlign = 'left'
+    ctx.fillText('↗', x + w / 2 - 10, y + 0.5)
   }
   ctx.restore()
 }

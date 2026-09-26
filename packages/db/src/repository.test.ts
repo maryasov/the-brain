@@ -408,4 +408,16 @@ describe('Repository', () => {
     // Hidden thoughts are NOT part of the returned scope.
     expect(nb.thoughts.map((t) => t.id)).not.toContain(b.id)
   })
+
+  it('reports attachment badge counts on the neighborhood', () => {
+    const root = repo.getOrCreateRoot()
+    const a = repo.createThought({ name: 'BadgeA', parentId: root.id })
+    repo.addAttachment({ thoughtId: a.id, kind: 'url', uri: 'https://example.com', label: 'Site' })
+    repo.addAttachment({ thoughtId: a.id, kind: 'file', uri: '/tmp/notes.pdf', label: 'notes' })
+    const nb = repo.getNeighborhood(root.id)!
+    expect(nb.attachCounts?.[a.id]).toEqual({ total: 2, urls: 1 })
+    expect(nb.attachCounts?.[root.id]).toBeUndefined()
+    // As-of replays omit the badge map (attachments are not journaled).
+    expect(repo.getNeighborhoodAsOf(root.id, Date.now())?.attachCounts).toBeUndefined()
+  })
 })

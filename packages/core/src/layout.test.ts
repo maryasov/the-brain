@@ -23,7 +23,8 @@ const empty: Omit<Viewport, 'focus'> = {
   jumps: [],
   siblings: [],
   intimacy: {},
-  hidden: {}
+  hidden: {},
+  attachCounts: {}
 }
 
 describe('layoutViewport', () => {
@@ -236,5 +237,16 @@ describe('More-gate counts', () => {
       hidden: { c: { parents: [], children: [], jumps: [] } }
     })
     expect(layout.byId['c'].hidden).toBeUndefined()
+  })
+
+  it('attaches attachment badge counts, omitting zero totals', () => {
+    const layout = layoutViewport({
+      focus: t('f'),
+      ...empty,
+      children: [t('c'), t('d')],
+      attachCounts: { c: { total: 3, urls: 1 }, d: { total: 0, urls: 0 } }
+    })
+    expect(layout.byId['c'].attach).toEqual({ total: 3, urls: 1 })
+    expect(layout.byId['d'].attach).toBeUndefined()
   })
 })
