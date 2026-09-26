@@ -187,6 +187,42 @@ export interface ThoughtCard {
   counts: { parents: number; children: number; jumps: number; siblings: number };
 }
 
+/**
+ * Back-in-time journal entry (migration v6). Deletions and renames are the
+ * events the tables alone cannot replay; `*_created` rows only feed the
+ * history list. `subject_id` is the thought id, or the link row id for link
+ * events; `payload` carries display names so history renders without joins.
+ */
+export type EventKind =
+  | 'thought_created'
+  | 'thought_deleted'
+  | 'thought_renamed'
+  | 'link_created'
+  | 'link_deleted';
+
+export interface BrainEvent {
+  seq: number;
+  at: number;
+  kind: EventKind;
+  subjectId: string;
+  payload: {
+    name?: string;
+    fromId?: string;
+    toId?: string;
+    type?: LinkType;
+    fromName?: string;
+    toName?: string;
+  } | null;
+}
+
+export interface EventRow {
+  id: number;
+  at: number;
+  kind: EventKind;
+  subject_id: string;
+  payload: string | null;
+}
+
 /** Create-request payloads crossing the IPC boundary. */
 export interface CreateThoughtInput {
   name: string;
@@ -266,6 +302,12 @@ export interface BrainApi {
   /** Hover-card data for a thought (description, tags, link counts). */
   getThoughtCard(id: string): Promise<ThoughtCard | null>;
   getNeighborhood(focusId: string): Promise<Neighborhood | null>;
+  /** The same neighborhood as it stood at a past timestamp (Back in Time). */
+  getNeighborhoodAsOf(focusId: string, at: number): Promise<Neighborhood | null>;
+  /** Journal entries touching one thought (its history list). */
+  listHistory(thoughtId: string, limit?: number): Promise<BrainEvent[]>;
+  /** Earliest recorded activity, for the time-slider bounds. */
+  getEarliestActivity(): Promise<number | null>;
   createThought(input: CreateThoughtInput): Promise<Thought>;
   updateThought(input: UpdateThoughtInput): Promise<Thought>;
   deleteThought(id: string, options: DeleteOptions): Promise<void>;
@@ -311,6 +353,9 @@ export const IPC = {
   getThought: 'brain:getThought',
   getThoughtCard: 'brain:getThoughtCard',
   getNeighborhood: 'brain:getNeighborhood',
+  getNeighborhoodAsOf: 'brain:getNeighborhoodAsOf',
+  listHistory: 'brain:listHistory',
+  getEarliestActivity: 'brain:getEarliestActivity',
   createThought: 'brain:createThought',
   updateThought: 'brain:updateThought',
   deleteThought: 'brain:deleteThought',
@@ -395,4 +440,15 @@ export function rowToAttachment(row: AttachmentRow): Attachment {
     mime: row.mime,
     createdAt: row.created_at
   };
+}
+
+/** Helper to map a raw DB event row to a domain BrainEvent. */
+export function rowToEvent(row: EventRow): BrainEvent {
+  let payload: BrainEvent['payload'] = null
+  try {
+    payload = row.payload ? (JSON.parse(row.payload) as BrainEvent['payload']) : null
+  } catch {
+    /* a corrupt payload degrades to a nameless event row */
+  }
+  return { seq: row.id, at: row.at, kind: row.kind, subjectId: row.subject_id, payload }
 }

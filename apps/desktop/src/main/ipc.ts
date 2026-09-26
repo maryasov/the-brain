@@ -30,6 +30,13 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.getThought, (_e, id: string) => r().getThought(id))
   ipcMain.handle(IPC.getThoughtCard, (_e, id: string) => r().getThoughtCard(id))
   ipcMain.handle(IPC.getNeighborhood, (_e, focusId: string) => r().getNeighborhood(focusId))
+  ipcMain.handle(IPC.getNeighborhoodAsOf, (_e, focusId: string, at: number) =>
+    r().getNeighborhoodAsOf(focusId, at)
+  )
+  ipcMain.handle(IPC.listHistory, (_e, thoughtId: string, limit?: number) =>
+    r().listHistory(thoughtId, limit)
+  )
+  ipcMain.handle(IPC.getEarliestActivity, () => r().earliestActivity())
   ipcMain.handle(IPC.createThought, (_e, input: CreateThoughtInput) => r().createThought(input))
   ipcMain.handle(IPC.updateThought, (_e, input: UpdateThoughtInput) => r().updateThought(input))
   ipcMain.handle(IPC.deleteThought, (_e, id: string, options: DeleteOptions) =>

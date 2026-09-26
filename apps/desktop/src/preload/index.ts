@@ -16,6 +16,11 @@ const api: BrainApi = {
   getThought: (id: string) => ipcRenderer.invoke(IPC.getThought, id),
   getThoughtCard: (id: string) => ipcRenderer.invoke(IPC.getThoughtCard, id),
   getNeighborhood: (focusId: string) => ipcRenderer.invoke(IPC.getNeighborhood, focusId),
+  getNeighborhoodAsOf: (focusId: string, at: number) =>
+    ipcRenderer.invoke(IPC.getNeighborhoodAsOf, focusId, at),
+  listHistory: (thoughtId: string, limit?: number) =>
+    ipcRenderer.invoke(IPC.listHistory, thoughtId, limit),
+  getEarliestActivity: () => ipcRenderer.invoke(IPC.getEarliestActivity),
   createThought: (input: CreateThoughtInput) => ipcRenderer.invoke(IPC.createThought, input),
   updateThought: (input: UpdateThoughtInput) => ipcRenderer.invoke(IPC.updateThought, input),
   deleteThought: (id: string, options: DeleteOptions) =>

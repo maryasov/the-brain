@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   Attachment,
   AttachmentKind,
+  BrainEvent,
   ImportResult,
   LinkType,
   Neighborhood,
@@ -53,6 +54,9 @@ interface BrainState {
   attachments: Attachment[]
   recent: Thought[]
   minimap: RingLayout | null
+  history: BrainEvent[]
+  asOf: number | null
+  earliest: number | null
   sets: ThoughtSet[]
   setsOpen: boolean
   activeSetId: string | null
@@ -108,6 +112,7 @@ interface BrainState {
   loadAux(id: string): Promise<void>
   showHover(id: string, x: number, y: number): Promise<void>
   hideHover(): void
+  setAsOf(t: number | null): Promise<void>
 }
 
 export const useBrain = create<BrainState>((set, get) => ({
@@ -123,6 +128,9 @@ export const useBrain = create<BrainState>((set, get) => ({
   attachments: [],
   recent: [],
   minimap: null,
+  history: [],
+  asOf: null,
+  earliest: null,
   sets: [],
   setsOpen: false,
   activeSetId: null,
@@ -137,6 +145,7 @@ export const useBrain = create<BrainState>((set, get) => ({
   async init() {
     try {
       const root = await window.brain.getOrCreateRoot()
+      set({ earliest: await window.brain.getEarliestActivity() })
       await get().focus(root.id, { record: false })
       await get().refreshPinned()
       await get().refreshSets()
@@ -162,7 +171,9 @@ export const useBrain = create<BrainState>((set, get) => ({
       set((s) => ({ past: [...s.past, s.focusId as string], future: [] }))
     }
     try {
-      const nb = await window.brain.getNeighborhood(id)
+      const nb = get().asOf
+        ? await window.brain.getNeighborhoodAsOf(id, get().asOf as number)
+        : await window.brain.getNeighborhood(id)
       if (!nb) {
         set({ error: `Thought ${id} not found` })
         return
@@ -193,7 +204,9 @@ export const useBrain = create<BrainState>((set, get) => ({
     cardCache.clear()
     const id = get().focusId
     if (!id) return
-    const nb = await window.brain.getNeighborhood(id)
+    const nb = get().asOf
+      ? await window.brain.getNeighborhoodAsOf(id, get().asOf as number)
+      : await window.brain.getNeighborhood(id)
     if (!nb) return
     const viewport = computeViewport(nb)
     const layout = layoutViewport(viewport)
@@ -207,11 +220,12 @@ export const useBrain = create<BrainState>((set, get) => ({
   // but never block or fail the main navigation on their account.
   async loadAux(id) {
     try {
-      const [recent, sub] = await Promise.all([
+      const [recent, sub, history] = await Promise.all([
         window.brain.listRecent(20),
-        window.brain.getSubgraph(id, 2)
+        window.brain.getSubgraph(id, 2),
+        window.brain.listHistory(id, 12)
       ])
-      set({ recent, minimap: sub ? ringLayout(sub) : null })
+      set({ recent, minimap: sub ? ringLayout(sub) : null, history })
     } catch {
       /* auxiliary data is best-effort */
     }
@@ -486,6 +500,13 @@ export const useBrain = create<BrainState>((set, get) => ({
   hideHover() {
     hoverToken++
     if (get().hoverTip) set({ hoverTip: null })
+  },
+
+  // Back in Time: null means "now". Writes always hit the present; this only
+  // changes how the canvas reads the graph.
+  async setAsOf(t) {
+    set({ asOf: t })
+    await get().reload()
   }
 }))
 
@@ -516,6 +537,9 @@ const debugView = () => {
     setResults: s.setResults.map((t) => ({ id: t.id, name: t.name, type: t.type })),
     dialog: s.dialog,
     hoverTip: s.hoverTip ? { id: s.hoverTip.card.id, name: s.hoverTip.card.name } : null,
+    asOf: s.asOf,
+    earliest: s.earliest,
+    history: s.history.map((e) => ({ kind: e.kind, at: e.at })),
     focusType: s.viewport?.focus.type,
     recent: s.recent.map((t) => ({ id: t.id, name: t.name, updatedAt: t.updatedAt })),
     minimapNodes: s.minimap?.nodes.length ?? 0,
@@ -554,6 +578,7 @@ type RpcArgs = {
   attachmentId?: string
   setId?: string
   def?: { text?: string; type?: string; tag?: string }
+  t?: number
   dx?: number
   dy?: number
 }
@@ -649,6 +674,12 @@ window.__brainRpc = async (method: string, args: RpcArgs = {}) => {
       )
       await new Promise((r) => setTimeout(r, 100))
       return { dialog: s().dialog }
+    }
+    case 'set_asof': {
+      // Back in Time: {t: epoch-ms} views the graph as of that moment;
+      // omitting t (or 0) returns to the present.
+      await s().setAsOf(typeof args.t === 'number' && args.t > 0 ? args.t : null)
+      return debugView()
     }
     case 'hover': {
       // Debug-only: run a real mousemove over a node's center through the

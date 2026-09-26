@@ -98,10 +98,30 @@ console.log('POST /import/opml reuses names:', reOpml.thoughts === 0)
 const badImp = await j('POST', '/import', { not: 'a snapshot' })
 console.log('bad import rejected:', badImp.status === 400)
 
+const tAlive = Date.now()
 const del = await j('DELETE', `/thoughts/${created.id}?mode=cascade`)
 console.log('delete status:', del.status)
 const gone = await j('GET', `/thought/${created.id}`)
 console.log('gone after delete:', gone.data === null)
+
+// Back in Time: the deleted child is still there at tAlive, gone afterwards.
+const nbNow = (await j('GET', `/neighborhood/${root.id}`)).data
+const nbPast = (await j('GET', `/neighborhood/${root.id}?t=${tAlive}`)).data
+console.log(
+  'as-of replay ok:',
+    !nbNow.thoughts.some((t) => t.id === created.id) &&
+    nbPast.thoughts.some((t) => t.id === created.id && t.name === 'API Child Renamed')
+)
+const hist = (await j('GET', `/history/${created.id}`)).data
+const kinds = new Set(hist.map((e) => e.kind))
+console.log(
+  'history kinds ok:',
+    ['thought_created', 'thought_renamed', 'link_created', 'link_deleted', 'thought_deleted'].every(
+      (k) => kinds.has(k)
+    )
+)
+const earliest = (await j('GET', '/earliest')).data
+console.log('GET /earliest ok:', typeof earliest.earliest === 'number')
 
 // App remote control: state writes always work; RPC needs a running desktop.
 const putFocus = await j('PUT', '/state/focus', { id: root.id })

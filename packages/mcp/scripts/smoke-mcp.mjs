@@ -123,9 +123,27 @@ console.log(
 const reOpml = await call('brain_import_opml', { xml: opml })
 console.log('opml re-import reuses names:', reOpml.thoughts === 0)
 
+const tAlive = Date.now()
 await call('brain_delete_thought', { id: created.id, mode: 'cascade' })
 const after = await call('brain_get_thought', { id: created.id })
 console.log('deleted ok:', after === null)
+
+// Back in Time: replay the root's neighborhood at tAlive (child still alive there).
+const nbNow = await call('brain_get_neighborhood', { focusId: root.id })
+const nbPast = await call('brain_get_neighborhood', { focusId: root.id, at: tAlive })
+console.log(
+  'as-of replay ok:',
+  !nbNow.thoughts.some((t) => t.id === created.id) &&
+    nbPast.thoughts.some((t) => t.id === created.id)
+)
+const hist = await call('brain_list_history', { thoughtId: created.id })
+const kinds = new Set(hist.map((e) => e.kind))
+console.log(
+  'history kinds ok:',
+  ['thought_created', 'link_created', 'link_deleted', 'thought_deleted'].every((k) =>
+    kinds.has(k)
+  )
+)
 
 await client.close()
 console.log('MCP SMOKE: PASS')

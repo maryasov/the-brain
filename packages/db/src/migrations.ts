@@ -160,4 +160,27 @@ export function migrate(db: Database.Database): void {
     `
     )
   }
+
+  if (current < 6) {
+    run(
+      6,
+      `
+      -- Back in Time (TheBrain "Time Machine"): an append-only journal of the
+      -- structural events the tables alone cannot replay — deletions (the rows
+      -- are gone) and renames (the old name is gone). Creation times live in
+      -- created_at; *_created events exist only to render the history list.
+      CREATE TABLE events (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        at         INTEGER NOT NULL,
+        kind       TEXT NOT NULL CHECK (kind IN
+                   ('thought_created','thought_deleted','thought_renamed',
+                    'link_created','link_deleted')),
+        subject_id TEXT NOT NULL,
+        payload    TEXT
+      );
+      CREATE INDEX events_subject_idx ON events(subject_id, at);
+      CREATE INDEX events_at_idx      ON events(at);
+    `
+    )
+  }
 }

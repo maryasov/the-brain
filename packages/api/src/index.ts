@@ -79,6 +79,9 @@ async function route(
             'GET /thought/:id',
             'GET /card/:id',
             'GET /neighborhood/:id',
+            'GET /neighborhood/:id?t=<ms> (back in time)',
+            'GET /history/:thoughtId?limit=',
+            'GET /earliest',
             'GET /viewport/:id',
             'GET /search?q=',
             'GET /pinned',
@@ -116,8 +119,21 @@ async function route(
     if (head === 'root') return { status: 200, data: repo.getOrCreateRoot() }
     if (head === 'thought' && second) return { status: 200, data: repo.getThought(second) }
     if (head === 'card' && second) return { status: 200, data: repo.getThoughtCard(second) }
-    if (head === 'neighborhood' && second)
-      return { status: 200, data: repo.getNeighborhood(second) }
+    if (head === 'neighborhood' && second) {
+      const t = Number(url.searchParams.get('t'))
+      return {
+        status: 200,
+        data:
+          Number.isFinite(t) && t > 0
+            ? repo.getNeighborhoodAsOf(second, t)
+            : repo.getNeighborhood(second)
+      }
+    }
+    if (head === 'history' && second) {
+      const limit = Number(url.searchParams.get('limit') ?? 30)
+      return { status: 200, data: repo.listHistory(second, Number.isFinite(limit) ? limit : 30) }
+    }
+    if (head === 'earliest') return { status: 200, data: { earliest: repo.earliestActivity() } }
     if (head === 'viewport' && second) {
       const nb = repo.getNeighborhood(second)
       return { status: 200, data: nb ? computeViewport(nb) : null }

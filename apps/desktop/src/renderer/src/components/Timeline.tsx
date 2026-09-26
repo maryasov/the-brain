@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import { useBrain } from '../store.js'
 
 function ago(ts: number): string {
@@ -15,7 +16,23 @@ export function Timeline() {
   const recent = useBrain((s) => s.recent)
   const focusId = useBrain((s) => s.focusId)
   const toggleTimeline = useBrain((s) => s.toggleTimeline)
+  const asOf = useBrain((s) => s.asOf)
+  const earliest = useBrain((s) => s.earliest)
+  const setAsOf = useBrain((s) => s.setAsOf)
+  const [dragged, setDragged] = useState<number | null>(null)
+  const commitTimer = useRef<number | null>(null)
   if (!open) return null
+
+  const now = Date.now()
+  const value = dragged ?? asOf ?? now
+  const onSlide = (v: number) => {
+    setDragged(v)
+    if (commitTimer.current !== null) clearTimeout(commitTimer.current)
+    commitTimer.current = window.setTimeout(() => {
+      setDragged(null)
+      void setAsOf(v)
+    }, 250)
+  }
 
   return (
     <aside className="timeline">
@@ -40,6 +57,28 @@ export function Timeline() {
           </li>
         ))}
       </ul>
+
+      {earliest !== null && earliest < now - 5000 && (
+        <div className="time-machine">
+          <h4>Back in time</h4>
+          <input
+            type="range"
+            min={earliest}
+            max={now}
+            step={Math.max(1, Math.round((now - earliest) / 400))}
+            value={value}
+            onChange={(e) => onSlide(Number(e.target.value))}
+          />
+          <div className="tm-when">
+            <span>{asOf ? new Date(asOf).toLocaleString() : 'present'}</span>
+            {asOf !== null && (
+              <button className="link-btn" onClick={() => void setAsOf(null)}>
+                now
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

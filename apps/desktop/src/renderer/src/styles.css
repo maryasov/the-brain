@@ -1001,3 +1001,84 @@ button {
 .thought-tip .tt-count.on {
   color: var(--text);
 }
+
+/* ---- Back in Time ---- */
+
+.timeline .time-machine {
+  margin: 10px 12px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.timeline .time-machine h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.timeline .time-machine input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.tm-when {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.tm-when .link-btn {
+  font-size: 11px;
+}
+
+.inspector .history {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.inspector .history h4 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hist-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.hist-row .what {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-row .when {
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.topbar .past-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(90, 162, 255, 0.15);
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}

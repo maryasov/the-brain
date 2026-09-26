@@ -42,6 +42,7 @@ export function App() {
   const setsOpen = useBrain((s) => s.setsOpen)
   const dialog = useBrain((s) => s.dialog)
   const openDialog = useBrain((s) => s.openDialog)
+  const asOf = useBrain((s) => s.asOf)
 
   const [searchOpen, setSearchOpen] = useState(false)
 
@@ -166,6 +167,15 @@ export function App() {
         <div className="focus-name" title={focusName}>
           {focusName || '—'}
         </div>
+        {asOf !== null && (
+          <button
+            className="past-badge"
+            title="Back in Time — click to return to the present"
+            onClick={() => void useBrain.getState().setAsOf(null)}
+          >
+            ⧖ {new Date(asOf).toLocaleString()}
+          </button>
+        )}
         <div className="spacer" />
         <button className="btn search-btn" onClick={() => setSearchOpen(true)}>
           <span>Search thoughts…</span>

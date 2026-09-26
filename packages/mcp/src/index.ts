@@ -55,11 +55,30 @@ const TOOLS = [
   {
     name: 'brain_get_neighborhood',
     description:
-      'Raw 1-hop neighborhood of a focus thought: the focus, all neighbor thoughts, and the links between them.',
+      'Raw 1-hop neighborhood of a focus thought: the focus, all neighbor thoughts, and the links between them. Pass at=<ms> to see it as it stood at a past timestamp (Back in Time).',
     inputSchema: {
       type: 'object',
-      properties: { focusId: { type: 'string' } },
+      properties: {
+        focusId: { type: 'string' },
+        at: {
+          type: 'number',
+          description: 'Optional Unix timestamp (ms) to replay the graph as of that moment'
+        }
+      },
       required: ['focusId']
+    }
+  },
+  {
+    name: 'brain_list_history',
+    description:
+      'Journal of events touching a thought: created, renamed, deleted, links/jumps added or removed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        thoughtId: { type: 'string' },
+        limit: { type: 'number', description: 'Max events to return (default 30, cap 200)' }
+      },
+      required: ['thoughtId']
     }
   },
   {
@@ -373,8 +392,14 @@ async function handle(name: string, a: Args): Promise<unknown> {
       return repo.getThought(str(a, 'id'))
     case 'brain_get_card':
       return repo.getThoughtCard(str(a, 'id'))
-    case 'brain_get_neighborhood':
-      return repo.getNeighborhood(str(a, 'focusId'))
+    case 'brain_get_neighborhood': {
+      const at = typeof a.at === 'number' && Number.isFinite(a.at) && a.at > 0 ? a.at : null
+      return at !== null
+        ? repo.getNeighborhoodAsOf(str(a, 'focusId'), at)
+        : repo.getNeighborhood(str(a, 'focusId'))
+    }
+    case 'brain_list_history':
+      return repo.listHistory(str(a, 'thoughtId'), typeof a.limit === 'number' ? a.limit : 30)
     case 'brain_list_recent':
       return repo.listRecent(typeof a.limit === 'number' ? a.limit : 24)
     case 'brain_get_subgraph':

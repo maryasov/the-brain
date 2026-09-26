@@ -74,6 +74,47 @@ describe('Repository', () => {
     expect(repo.getThoughtCard('missing')).toBeNull()
   })
 
+  it('journals events and replays the graph as of a past time', () => {
+    const root = repo.getOrCreateRoot()
+    const a = repo.createThought({ name: 'Alpha', parentId: root.id })
+    const b = repo.createThought({ name: 'Beta', parentId: a.id })
+
+    // As of the a→b link's birth: the family is intact under the original
+    // name. (The monotonic clock makes that timestamp a safe "early" bound:
+    // every later write is strictly greater, everything older smaller.)
+    const live = repo.getNeighborhood(a.id)!
+    const t = live.links.find((l) => l.fromId === a.id && l.toId === b.id)!.createdAt
+    const earlyOfA = repo.getNeighborhoodAsOf(a.id, t)!
+    expect(earlyOfA.thoughts.map((ti) => ti.id)).toContain(b.id)
+    expect(earlyOfA.thoughts.find((ti) => ti.id === b.id)?.name).toBe('Beta')
+    const earlyOfRoot = repo.getNeighborhoodAsOf(root.id, t)!
+    expect(computeViewport(earlyOfRoot).children.map((t) => t.name)).toEqual(['Alpha'])
+
+    repo.updateThought({ id: b.id, name: 'Gamma' })
+    const future = () => Date.now() + 60_000
+    const mid = repo.getNeighborhoodAsOf(a.id, future())!
+    expect(mid.thoughts.find((t) => t.id === b.id)?.name).toBe('Gamma')
+
+    repo.deleteThought(a.id, { mode: 'cascade' })
+    const late = repo.getNeighborhoodAsOf(root.id, future())!
+    expect(computeViewport(late).children.map((t) => t.id)).not.toContain(a.id)
+    expect(repo.getNeighborhoodAsOf(a.id, future())).toBeNull()
+
+    // Ghost restore: the cascade physically removed a and b, but replaying
+    // the moment before their deaths resurrects them from the journal.
+    const resurrected = repo.getNeighborhoodAsOf(root.id, t)!
+    expect(computeViewport(resurrected).children.map((th) => th.name)).toEqual(['Alpha'])
+    const ofA = repo.getNeighborhoodAsOf(a.id, t)!
+    expect(ofA.thoughts.map((th) => th.id)).toContain(b.id)
+
+    // The history journal covers the thought's own and its link events.
+    const kinds = repo.listHistory(a.id).map((e) => e.kind)
+    expect(kinds).toContain('thought_created')
+    expect(kinds).toContain('thought_deleted')
+    expect(kinds).toContain('link_created')
+    expect(repo.earliestActivity()).toBeTypeOf('number')
+  })
+
   it('indexes search and keeps it in sync on rename', () => {
     const root = repo.getOrCreateRoot()
     const t = repo.createThought({ name: 'Photosynthesis', parentId: root.id })

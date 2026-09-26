@@ -52,6 +52,12 @@ animates the whole map, so you think in relationships instead of folders.
 - **Hover cards**: rest the pointer on any thought and a tooltip shows its
   type, description, tags and the parent/child/jump/sibling/attachment counts
   of everything around it — the same card via `GET /card/:id` / `brain_get_card`.
+- **Back in Time**: an append-only journal records every create / rename /
+  delete / link / unlink. Drag the *Back in time* slider in the Recent dock (or
+  use `GET /neighborhood/:id?t=<ms>` / `brain_get_neighborhood(at=…)`) to see
+  the graph as it stood at any past moment — deleted thoughts and links are
+  resurrected from the journal, names revert to what they were, and the
+  inspector shows each thought's history (the past view is read-only).
 - Full-text search palette (SQLite FTS5) to find and focus any thought.
 - Pinboard for quick jumps, plus per-thought tags.
 - Agent access: MCP server + HTTP API over the same database, including full
@@ -134,6 +140,7 @@ pnpm api           # start the HTTP JSON API on 127.0.0.1:8788
 | Attach content        | Inspector list/form, or drop files onto the graph (→ focused thought)  |
 | Pin a thought         | Toolbar (appears in the top-left pinboard)                            |
 | Timeline (recent)     | Toolbar `Recent` or `T` — click a row to focus it                      |
+| Back in Time          | *Back in time* slider in the Recent dock; `⧖` badge returns to the present (past view is read-only) |
 | Minimap               | Bottom-right 2-hop overview; click a dot to focus that thought         |
 | Filtered sets         | Toolbar `Sets` or `S` — save/run/delete named searches (text/type/tag)  |
 | Export / import       | Toolbar `Export` / `Import` — JSON snapshot or OPML outline via native file dialog |
@@ -204,8 +211,10 @@ SQLite file.
 
 ### MCP server (`packages/mcp`)
 
-A stdio Model Context Protocol server with 33 tools: `brain_get_root`,
-`brain_get_thought`, `brain_get_card` (hover-card data), `brain_get_neighborhood`, `brain_list_recent` (timeline),
+A stdio Model Context Protocol server with 34 tools: `brain_get_root`,
+`brain_get_thought`, `brain_get_card` (hover-card data), `brain_get_neighborhood`
+(optional `at=<ms>` replays the graph as of a past time — Back in Time),
+`brain_list_history` (a thought's event journal), `brain_list_recent` (timeline),
 `brain_get_subgraph` (minimap data: the depth-hop neighborhood around a
 thought), `brain_navigate` (returns the
 role-grouped viewport — focus/parents/children/jumps/siblings, i.e. "what the
@@ -240,7 +249,7 @@ pnpm api            # listens on http://127.0.0.1:8788 (PORT / HOST to change)
 curl localhost:8788/   # prints the endpoint index
 ```
 
-| Read  | `GET /root` · `/thought/:id` · `/card/:id` · `/neighborhood/:id` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
+| Read  | `GET /root` · `/thought/:id` · `/card/:id` · `/neighborhood/:id` (`?t=<ms>` = as of a past time) · `/history/:thoughtId?limit=` · `/earliest` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
 | ----- | -------------------------------------------------------------------------------------------------------------------- |
 | Write | `POST /thoughts` · `PATCH /thoughts/:id` · `DELETE /thoughts/:id?mode=detach\|cascade`                               |
 | Links | `POST /links` · `DELETE /links` (body: `{fromId,toId,type}`)                                                         |
@@ -277,7 +286,9 @@ grabbing the pointer:
   the create/rename/delete modal), `link`, `sim_drag` (replays a drag gesture
   through the real DOM handlers), `sim_click {dx,dy}` (replays a click offset
   from a node — verifies gate/zone routing), `hover {id}` (replays a mousemove
-  over a node and waits out the tooltip delay; empty id hides it), `add_attachment` /
+  over a node and waits out the tooltip delay; empty id hides it), `set_asof {t}`
+    (Back in Time: `t>0` rewinds the canvas to that timestamp, anything else
+    returns it to the present; read-only while rewound), `add_attachment` /
   `remove_attachment`, `add_child`/`add_parent`/`add_jump`/`add_sibling`,
   `rename`, `delete`, `toggle_pin`, `add_tag`, `remove_tag`). `brain_app_screenshot` /
   `GET /app/screenshot` wrap the screenshot method as an MCP image / raw PNG

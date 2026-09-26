@@ -3,16 +3,20 @@ import type Database from 'better-sqlite3'
 import { buildOpml, parseOpml, type OpmlNode } from '@the-brain/core'
 import {
   rowToAttachment,
+  rowToEvent,
   rowToLink,
   rowToSet,
   rowToThought,
   type AddAttachmentInput,
   type Attachment,
   type AttachmentRow,
+  type BrainEvent,
   type BrainExport,
   type CreateSetInput,
   type CreateThoughtInput,
   type DeleteOptions,
+  type EventKind,
+  type EventRow,
   type ImportResult,
   type Link,
   type LinkInput,
@@ -159,6 +163,134 @@ export class Repository {
         )
       }
     }
+  }
+
+  /**
+   * The neighborhood as it stood at a past timestamp (Back in Time). Deletions
+   * remove rows physically, so the journal doubles as the restore source:
+   * anything deleted after `at` comes back as a ghost rebuilt from its payload.
+   * Personal-brain scale, so the replay runs as plain set logic in JS.
+   */
+  getNeighborhoodAsOf(focusId: string, at: number): Neighborhood | null {
+    const byId = new Map<string, Thought>()
+    for (const r of this.db
+      .prepare('SELECT * FROM thoughts WHERE created_at <= ?')
+      .all(at) as ThoughtRow[]) {
+      byId.set(r.id, rowToThought(r))
+    }
+    // Ghosts: rows deleted from the table after `at` still existed back then.
+    for (const e of this.db
+      .prepare("SELECT subject_id, payload FROM events WHERE kind = 'thought_deleted' AND at > ?")
+      .all(at) as Array<{ subject_id: string; payload: string | null }>) {
+      if (!e.payload || byId.has(e.subject_id)) continue
+      const p = JSON.parse(e.payload) as {
+        name?: string
+        description?: string | null
+        color?: string | null
+        type?: string | null
+        pinned?: number
+        archived?: number
+        createdAt?: number
+        updatedAt?: number
+      }
+      if (typeof p.createdAt !== 'number' || p.createdAt > at) continue
+      byId.set(e.subject_id, {
+        id: e.subject_id,
+        name: p.name ?? '(deleted)',
+        description: p.description ?? null,
+        color: p.color ?? null,
+        type: p.type ?? null,
+        pinned: p.pinned === 1,
+        archived: p.archived === 1,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt ?? p.createdAt
+      })
+    }
+    const focus = byId.get(focusId)
+    if (!focus) return null
+
+    const links = (this.db
+      .prepare('SELECT * FROM links WHERE created_at <= ?')
+      .all(at) as LinkRow[]).map(rowToLink)
+    for (const e of this.db
+      .prepare("SELECT subject_id, payload FROM events WHERE kind = 'link_deleted' AND at > ?")
+      .all(at) as Array<{ subject_id: string; payload: string | null }>) {
+      if (!e.payload) continue
+      const p = JSON.parse(e.payload) as {
+        fromId?: string
+        toId?: string
+        type?: LinkType
+        createdAt?: number
+      }
+      if (
+        typeof p.createdAt !== 'number' ||
+        p.createdAt > at ||
+        !p.fromId ||
+        !p.toId ||
+        !p.type ||
+        links.some((l) => l.id === e.subject_id)
+      )
+        continue
+      links.push({ id: e.subject_id, fromId: p.fromId, toId: p.toId, type: p.type, createdAt: p.createdAt })
+    }
+    const alive = links.filter((l) => byId.has(l.fromId) && byId.has(l.toId))
+
+    // 1-hop roles, derived from the as-of links exactly like the live view.
+    const parents = alive.filter((l) => l.type === 'child' && l.toId === focusId).map((l) => l.fromId)
+    const children = alive
+      .filter((l) => l.type === 'child' && l.fromId === focusId)
+      .map((l) => l.toId)
+    const jumps = alive
+      .filter((l) => l.type === 'jump' && (l.fromId === focusId || l.toId === focusId))
+      .map((l) => (l.fromId === focusId ? l.toId : l.fromId))
+    const parentSet = new Set(parents)
+    const siblings = new Set(
+      alive
+        .filter((l) => l.type === 'child' && parentSet.has(l.fromId) && l.toId !== focusId)
+        .map((l) => l.toId)
+    )
+
+    const scope = new Set([focusId, ...parents, ...children, ...jumps, ...siblings])
+    // Names as they were: the newest rename at or before `at` wins.
+    for (const row of this.db
+      .prepare(
+        `SELECT subject_id, payload, at FROM events
+          WHERE kind = 'thought_renamed' AND at <= ? ORDER BY at ASC`
+      )
+      .all(at) as EventRow[]) {
+      const thought = byId.get(row.subject_id)
+      const name =
+        thought && row.payload ? (JSON.parse(row.payload) as { name?: string }).name : null
+      if (thought && name) thought.name = name
+    }
+    return {
+      focus,
+      thoughts: [...scope].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
+      links: alive.filter((l) => scope.has(l.fromId) && scope.has(l.toId))
+    }
+  }
+
+  /** Journal entries touching one thought (its own events + its link events). */
+  listHistory(thoughtId: string, limit = 30): BrainEvent[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM events
+          WHERE subject_id = ?
+             OR json_extract(payload, '$.fromId') = ?
+             OR json_extract(payload, '$.toId') = ?
+          ORDER BY at DESC, id DESC LIMIT ?`
+      )
+      .all(thoughtId, thoughtId, thoughtId, Math.max(1, Math.min(200, limit))) as EventRow[]
+    return rows.map(rowToEvent)
+  }
+
+  /** Oldest timestamp anywhere in the brain (thoughts + journal), for sliders. */
+  earliestActivity(): number | null {
+    const a = (this.db.prepare('SELECT MIN(created_at) AS t FROM thoughts').get() as {
+      t: number | null
+    }).t
+    const b = (this.db.prepare('SELECT MIN(at) AS t FROM events').get() as { t: number | null }).t
+    return a === null ? b : b === null ? a : Math.min(a, b)
   }
 
   search(query: string): SearchHit[] {
@@ -397,6 +529,7 @@ export class Repository {
         created_at: ts,
         updated_at: ts
       })
+      this.logEvent('thought_created', id, { name: input.name.trim() || 'Untitled' })
       if (input.parentId) {
         this.insertLink(input.parentId, id, input.linkType ?? 'child')
       }
@@ -406,6 +539,7 @@ export class Repository {
   }
 
   updateThought(input: UpdateThoughtInput): Thought {
+    const before = this.getThought(input.id)
     const fields: string[] = []
     const params: Record<string, unknown> = { id: input.id, updated_at: now() }
     for (const key of ['name', 'description', 'color', 'type', 'pinned'] as const) {
@@ -428,7 +562,12 @@ export class Repository {
         )
         .run(params)
     }
-    return this.getThought(input.id)!
+    const after = this.getThought(input.id)
+    // Renames are the one edit time-travel must remember (the old name is gone).
+    if (before && after && after.name !== before.name) {
+      this.logEvent('thought_renamed', after.id, { name: after.name })
+    }
+    return after!
   }
 
   setPinned(id: string, pinned: boolean): Thought {
@@ -440,13 +579,39 @@ export class Repository {
 
   deleteThought(id: string, options: DeleteOptions): void {
     if (options.mode === 'detach') {
+      const doomedLinks = this.db
+        .prepare('SELECT * FROM links WHERE from_id = ? OR to_id = ?')
+        .all(id, id) as LinkRow[]
       this.db.prepare('DELETE FROM links WHERE from_id = ? OR to_id = ?').run(id, id)
+      for (const l of doomedLinks) this.logLinkDeleted(l)
       return
     }
     // cascade: delete focus plus descendants whose only parents are all doomed.
     const doomed = this.computeCascade(id)
     const del = this.db.transaction(() => {
       const placeholders = doomed.map(() => '?').join(',')
+      const doomedLinks = this.db
+        .prepare(
+          `SELECT * FROM links WHERE from_id IN (${placeholders}) OR to_id IN (${placeholders})`
+        )
+        .all(...doomed, ...doomed) as LinkRow[]
+      const names = this.db
+        .prepare(`SELECT * FROM thoughts WHERE id IN (${placeholders})`)
+        .all(...doomed) as ThoughtRow[]
+      // Log while the rows still exist, so payloads keep display names — and
+      // enough of the row to resurrect it during an as-of replay later.
+      for (const l of doomedLinks) this.logLinkDeleted(l)
+      for (const r of names)
+        this.logEvent('thought_deleted', r.id, {
+          name: r.name,
+          description: r.description,
+          color: r.color,
+          type: r.type,
+          pinned: r.pinned,
+          archived: r.archived,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at
+        })
       this.db.prepare(`DELETE FROM thoughts WHERE id IN (${placeholders})`).run(...doomed)
     })
     del()
@@ -461,17 +626,24 @@ export class Repository {
   }
 
   unlink(fromId: string, toId: string, type: LinkType): void {
-    if (type === 'jump') {
-      this.db
-        .prepare(
-          "DELETE FROM links WHERE type='jump' AND ((from_id=? AND to_id=?) OR (from_id=? AND to_id=?))"
-        )
-        .run(fromId, toId, toId, fromId)
-    } else {
-      this.db
-        .prepare("DELETE FROM links WHERE type='child' AND from_id=? AND to_id=?")
-        .run(fromId, toId)
-    }
+    const doomed =
+      type === 'jump'
+        ? (this.db
+            .prepare(
+              "SELECT * FROM links WHERE type='jump' AND ((from_id=? AND to_id=?) OR (from_id=? AND to_id=?))"
+            )
+            .all(fromId, toId, toId, fromId) as LinkRow[])
+        : (this.db
+            .prepare("SELECT * FROM links WHERE type='child' AND from_id=? AND to_id=?")
+            .all(fromId, toId) as LinkRow[])
+    this.db
+      .prepare(
+        type === 'jump'
+          ? "DELETE FROM links WHERE type='jump' AND ((from_id=? AND to_id=?) OR (from_id=? AND to_id=?))"
+          : "DELETE FROM links WHERE type='child' AND from_id=? AND to_id=?"
+      )
+      .run(...(type === 'jump' ? [fromId, toId, toId, fromId] : [fromId, toId]))
+    for (const l of doomed) this.logLinkDeleted(l)
   }
 
   getOrCreateRoot(): Thought {
@@ -665,12 +837,45 @@ export class Repository {
   private insertLink(fromId: string, toId: string, type: LinkType): Link | null {
     if (fromId === toId) return null
     const id = randomUUID()
-    this.db
+    const changes = this.db
       .prepare(
         'INSERT OR IGNORE INTO links (id, from_id, to_id, type, created_at) VALUES (?, ?, ?, ?, ?)'
       )
-      .run(id, fromId, toId, type, now())
+      .run(id, fromId, toId, type, now()).changes
+    if (changes) {
+      this.logEvent('link_created', id, {
+        fromId,
+        toId,
+        type,
+        fromName: this.nameOf(fromId),
+        toName: this.nameOf(toId)
+      })
+    }
     return this.findLink(fromId, toId, type)
+  }
+
+  /** Append one journal entry (the Back in Time replay source). */
+  private logEvent(kind: EventKind, subjectId: string, payload?: Record<string, unknown>): void {
+    this.db
+      .prepare('INSERT INTO events (at, kind, subject_id, payload) VALUES (?, ?, ?, ?)')
+      .run(now(), kind, subjectId, payload ? JSON.stringify(payload) : null)
+  }
+
+  private logLinkDeleted(row: LinkRow): void {
+    this.logEvent('link_deleted', row.id, {
+      fromId: row.from_id,
+      toId: row.to_id,
+      type: row.type,
+      createdAt: row.created_at,
+      fromName: this.nameOf(row.from_id),
+      toName: this.nameOf(row.to_id)
+    })
+  }
+
+  private nameOf(id: string): string | undefined {
+    return (this.db.prepare('SELECT name FROM thoughts WHERE id = ?').get(id) as
+      | { name: string }
+      | undefined)?.name
   }
 
   private findLink(fromId: string, toId: string, type: LinkType): Link | null {

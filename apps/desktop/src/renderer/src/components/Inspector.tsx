@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useBrain } from '../store.js'
-import { THOUGHT_TYPES, type Attachment, type AttachmentKind, type Thought } from '@the-brain/shared'
+import {
+  THOUGHT_TYPES,
+  type Attachment,
+  type AttachmentKind,
+  type BrainEvent,
+  type Thought
+} from '@the-brain/shared'
 import { typeIcon } from '../typeIcons.js'
 
 /**
@@ -19,6 +25,8 @@ export function Inspector() {
   const addAttachment = useBrain((s) => s.addAttachment)
   const removeAttachment = useBrain((s) => s.removeAttachment)
   const openAttachment = useBrain((s) => s.openAttachment)
+  const history = useBrain((s) => s.history)
+  const asOf = useBrain((s) => s.asOf)
 
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
@@ -35,19 +43,25 @@ export function Inspector() {
 
   if (!open || !focus) return null
 
+  // While viewing the past, the inspector is read-only: edits would hit the
+  // present and immediately diverge from what the canvas shows.
+  const past = asOf !== null
   const commitName = () => {
+    if (past) return
     const v = name.trim()
     if (v && v !== focus.name) void saveThought({ name: v })
   }
   const commitDesc = () => {
+    if (past) return
     if (desc !== (focus.description ?? '')) void saveThought({ description: desc })
   }
   const commitType = () => {
+    if (past) return
     const v = type.trim().toLowerCase()
     if (v !== (focus.type ?? '')) void saveThought({ type: v || null })
   }
   const commitAttachment = async () => {
-    if (!attUri.trim()) return
+    if (past || !attUri.trim()) return
     await addAttachment(attKind, attUri)
     setAttUri('')
   }
@@ -124,7 +138,20 @@ export function Inspector() {
       <div className="meta">
         created {new Date(focus.createdAt).toLocaleDateString()} · updated{' '}
         {new Date(focus.updatedAt).toLocaleDateString()}
+        {past && ' · viewing the past (read-only)'}
       </div>
+
+      {history.length > 0 && (
+        <section className="history">
+          <h4>History</h4>
+          {history.map((e) => (
+            <div key={e.seq} className="hist-row">
+              <span className="what">{eventText(e, focus.id)}</span>
+              <span className="when">{new Date(e.at).toLocaleString()}</span>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="atts">
         <h4>
@@ -169,6 +196,30 @@ export function Inspector() {
       )}
     </aside>
   )
+}
+
+/** Human-readable journal line for the inspector's history section. */
+function eventText(e: BrainEvent, thoughtId: string): string {
+  const p = e.payload ?? {}
+  switch (e.kind) {
+    case 'thought_created':
+      return 'created'
+    case 'thought_deleted':
+      return 'deleted'
+    case 'thought_renamed':
+      return `renamed to “${p.name ?? '?'}”`
+    case 'link_created':
+      return `${p.type === 'jump' ? 'jumped to' : 'linked'} ${otherEnd(e, thoughtId)}`
+    case 'link_deleted':
+      return `unlinked ${otherEnd(e, thoughtId)}`
+  }
+}
+
+/** The far end of a link event, named from the payload when possible. */
+function otherEnd(e: BrainEvent, thoughtId: string): string {
+  const p = e.payload ?? {}
+  const forward = p.fromId === thoughtId
+  return (forward ? p.toName : p.fromName) ?? (forward ? p.toId : p.fromId)?.slice(0, 8) ?? '?'
 }
 
 /** Label-less attachments display as a file name, host+path, or short id. */
