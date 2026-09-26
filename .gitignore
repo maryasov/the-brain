@@ -19,5 +19,11 @@ coverage/
 # temporary debug scripts / screenshots
 .tmp-*
 
+# extracted third-party AppImage (proprietary; local study only)
+orig/
+
+# internal research notes on proprietary internals — local only
+docs/research/
+
 # TS build info
 *.tsbuildinfo
