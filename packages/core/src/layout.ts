@@ -17,6 +17,9 @@ export interface PositionedNode {
   y: number
   w: number
   h: number
+  /** TheBrain "More" gates: neighbors linked in each direction that are NOT
+   * shown in this viewport (omitted when nothing is hidden). */
+  hidden?: { parents: number; children: number; jumps: number }
 }
 
 export interface Point {
@@ -274,6 +277,13 @@ export function layoutViewport(vp: Viewport): Layout {
   }
 
   const byId: Record<string, PositionedNode> = {}
+  // Attach More-gate counts from the viewport's hidden-neighbor map.
+  for (const n of nodes) {
+    const h = vp.hidden[n.id]
+    if (h && (h.parents.length || h.children.length || h.jumps.length)) {
+      n.hidden = { parents: h.parents.length, children: h.children.length, jumps: h.jumps.length }
+    }
+  }
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,

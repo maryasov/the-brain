@@ -123,6 +123,15 @@ console.log(
 const reOpml = await call('brain_import_opml', { xml: opml })
 console.log('opml re-import reuses names:', reOpml.thoughts === 0)
 
+// More-gates: a hidden grandchild reported on the shown child at root focus.
+const grand = await call('brain_create_thought', { name: 'Smoke Grandchild', parentId: created.id })
+const nbG = await call('brain_get_neighborhood', { focusId: root.id })
+console.log(
+  'hidden More-gates ok:',
+  (nbG.hidden?.[created.id]?.children ?? []).includes(grand.id) &&
+    nbG.hidden?.[root.id] === undefined
+)
+
 const tAlive = Date.now()
 await call('brain_delete_thought', { id: created.id, mode: 'cascade' })
 const after = await call('brain_get_thought', { id: created.id })

@@ -46,29 +46,55 @@ export function BrainCanvas() {
   const suppressClickRef = useRef(false)
   const hoverIdRef = useRef<string | null>(null)
   const hoverTimerRef = useRef<number | null>(null)
+  const prevFocusRef = useRef<string | null>(null)
 
   layoutRef.current = useBrain((s) => s.layout)
   focusRef.current = useBrain((s) => s.focusId)
   selectedRef.current = useBrain((s) => s.selectedId)
   const focus = useBrain((s) => s.focus)
 
-  // Seed / retire display boxes when the layout changes.
+  // Seed / retire display boxes when the layout changes. New thoughts pop in
+  // FROM their source: TheBrain spawns entering thoughts at the neighbor you
+  // came through, not out of the empty middle of the canvas.
   useEffect(() => {
     const layout = layoutRef.current
     if (!layout) return
     const disp = displayRef.current
+    // Snapshot of boxes that were on screen BEFORE this layout arrived.
+    const had = new Map<string, Display>()
+    for (const [id, d] of disp) had.set(id, { ...d })
+    const nbr = new Map<string, string[]>()
+    const touch = (a: string, b: string) => {
+      if (!nbr.has(a)) nbr.set(a, [])
+      nbr.get(a)!.push(b)
+    }
+    for (const e of layout.edges) {
+      touch(e.sourceId, e.targetId)
+      touch(e.targetId, e.sourceId)
+    }
     const ids = new Set<string>()
     for (const n of layout.nodes) {
       ids.add(n.id)
       if (!disp.has(n.id)) {
-        // New nodes start collapsed at the center and fade in.
-        disp.set(n.id, { x: 0, y: 0, w: n.w, h: n.h, alpha: 0 })
+        let sx = 0
+        let sy = 0
+        const prevF = prevFocusRef.current
+        const src =
+          n.id === focusRef.current && prevF && prevF !== n.id
+            ? had.get(prevF)
+            : (nbr.get(n.id) ?? []).map((id) => had.get(id)).find((d) => d !== undefined)
+        if (src) {
+          sx = src.x
+          sy = src.y
+        }
+        disp.set(n.id, { x: sx, y: sy, w: n.w, h: n.h, alpha: 0 })
       }
       const d = disp.get(n.id)!
       d.w = n.w
       d.h = n.h
     }
     for (const id of [...disp.keys()]) if (!ids.has(id)) disp.delete(id)
+    prevFocusRef.current = focusRef.current
   }, [layoutRef.current?.nodes.length, focusRef.current])
 
   useEffect(() => {
@@ -143,6 +169,14 @@ export function BrainCanvas() {
           const isFocus = n.id === focusRef.current
           const isSelected = n.id === selectedRef.current
           drawNode(ctx, project(d, cx, cy, scale), n, d.alpha, isFocus, isSelected)
+        }
+
+        // "More" gate dots: thoughts with off-screen neighbors get tiny
+        // markers on the parent/child/jump sides (click jumps into them).
+        for (const n of layout.nodes) {
+          if (!n.hidden) continue
+          const d = disp.get(n.id)
+          if (d) drawMoreDots(ctx, project(d, cx, cy, scale), n)
         }
 
         // Drag-to-link rubber band, above the nodes.
@@ -253,6 +287,28 @@ export function BrainCanvas() {
     return dx < 0 ? ('addJump' as const) : ('addSibling' as const)
   }
 
+  // A "More" dot under the cursor? Clicking it jumps into the hidden relation
+  // (TheBrain opens a gate list; we go straight to the first hidden neighbor).
+  const moreDotAt = (
+    clientX: number,
+    clientY: number
+  ): { id: string; dir: 'parents' | 'children' | 'jumps' } | null => {
+    const layout = layoutRef.current
+    const p = toLayout(clientX, clientY)
+    if (!layout || !p) return null
+    for (const n of layout.nodes) {
+      if (!n.hidden) continue
+      const spots: Array<{ dir: 'parents' | 'children' | 'jumps'; x: number; y: number }> = []
+      if (n.hidden.parents > 0) spots.push({ dir: 'parents', x: n.x, y: n.y - n.h / 2 - 6 })
+      if (n.hidden.children > 0) spots.push({ dir: 'children', x: n.x, y: n.y + n.h / 2 + 6 })
+      if (n.hidden.jumps > 0) spots.push({ dir: 'jumps', x: n.x - n.w / 2 - 6, y: n.y })
+      for (const s of spots) {
+        if (Math.hypot(p.x - s.x, p.y - s.y) < 7) return { id: n.id, dir: s.dir }
+      }
+    }
+    return null
+  }
+
   const cancelHover = () => {
     if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
     hoverTimerRef.current = null
@@ -267,7 +323,8 @@ export function BrainCanvas() {
       onMouseMove={(e) => {
         const { clientX, clientY } = e
         const nodeId = hitTest(clientX, clientY)
-        e.currentTarget.style.cursor = nodeId || zoneAt(clientX, clientY) ? 'pointer' : 'default'
+        e.currentTarget.style.cursor =
+          nodeId || moreDotAt(clientX, clientY) || zoneAt(clientX, clientY) ? 'pointer' : 'default'
 
         // Hover card: appears after a short dwell on one node, follows the
         // cursor while parked there, and never competes with a link drag.
@@ -339,6 +396,12 @@ export function BrainCanvas() {
           return
         }
         cancelHover()
+        const dot = moreDotAt(e.clientX, e.clientY)
+        if (dot) {
+          const target = useBrain.getState().viewport?.hidden[dot.id]?.[dot.dir]?.[0]
+          if (target) void focus(target)
+          return
+        }
         const id = hitTest(e.clientX, e.clientY)
         if (id) {
           if (id !== focusRef.current) void focus(id)
@@ -454,6 +517,34 @@ function drawGates(
       ctx.lineWidth = 1.2
       ctx.stroke()
     }
+  }
+  ctx.restore()
+}
+
+/**
+ * "More" gate dots (TheBrain gates report MORE when relations exist beyond
+ * the viewport): tiny filled markers on the parent/child/jump side of the
+ * box, haloed so they read as clickable. Radius grows slightly with count.
+ */
+function drawMoreDots(ctx: CanvasRenderingContext2D, box: Box, n: PositionedNode): void {
+  const h = n.hidden
+  if (!h) return
+  const dots: Array<{ x: number; y: number; color: string; count: number }> = []
+  if (h.parents > 0)
+    dots.push({ x: box.cx, y: box.cy - box.h / 2 - 6, color: ROLE_COLOR.parent, count: h.parents })
+  if (h.children > 0)
+    dots.push({ x: box.cx, y: box.cy + box.h / 2 + 6, color: ROLE_COLOR.child, count: h.children })
+  if (h.jumps > 0)
+    dots.push({ x: box.cx - box.w / 2 - 6, y: box.cy, color: ROLE_COLOR.jump, count: h.jumps })
+  ctx.save()
+  for (const dt of dots) {
+    ctx.beginPath()
+    ctx.arc(dt.x, dt.y, 2.1 + Math.min(1.5, dt.count * 0.3), 0, Math.PI * 2)
+    ctx.strokeStyle = hexA(dt.color, 0.3)
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.fillStyle = hexA(dt.color, 0.95)
+    ctx.fill()
   }
   ctx.restore()
 }

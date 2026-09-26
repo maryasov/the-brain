@@ -93,6 +93,14 @@ export interface TagRow {
   name: string;
 }
 
+/** Hidden neighbors of one thought: ids linked in each direction that are NOT
+ * part of the returned neighborhood (TheBrain gate "More" semantics). */
+export interface HiddenCounts {
+  parents: string[];
+  children: string[];
+  jumps: string[];
+}
+
 /**
  * The neighborhood of a focus thought (1-hop, or depth-hop via getSubgraph),
  * as produced by the repository and consumed by the (pure) navigation engine
@@ -104,6 +112,8 @@ export interface Neighborhood {
   thoughts: Thought[];
   /** Links touching any node in this neighborhood. */
   links: Link[];
+  /** Per-thought off-screen relations, keyed by thought id (1-hop views only). */
+  hidden?: Record<string, HiddenCounts>;
 }
 
 /**

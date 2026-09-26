@@ -17,6 +17,7 @@ import {
   type DeleteOptions,
   type EventKind,
   type EventRow,
+  type HiddenCounts,
   type ImportResult,
   type Link,
   type LinkInput,
@@ -107,11 +108,18 @@ export class Repository {
     const neighborIds = new Set<string>([...parents, ...children, ...jumps, ...siblings])
     const thoughts = [focus, ...this.thoughtsByIds([...neighborIds])]
 
-    // Only return links whose BOTH endpoints are in the neighborhood set.
+    // Only return links whose BOTH endpoints are in the neighborhood set;
+    // the ones with a single endpoint inside become the "hidden" (More-gate)
+    // counts so the UI can show relations that exist off-screen.
     const scope = [...new Set([focusId, ...neighborIds])]
-    const links = this.linksWithin(scope)
-
-    return { focus, thoughts, links }
+    const touching = this.linksTouching(scope)
+    const scopeSet = new Set(scope)
+    return {
+      focus,
+      thoughts,
+      links: touching.filter((l) => scopeSet.has(l.fromId) && scopeSet.has(l.toId)),
+      hidden: this.hiddenFrom(scopeSet, touching)
+    }
   }
 
   /**
@@ -266,7 +274,8 @@ export class Repository {
     return {
       focus,
       thoughts: [...scope].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
-      links: alive.filter((l) => scope.has(l.fromId) && scope.has(l.toId))
+      links: alive.filter((l) => scope.has(l.fromId) && scope.has(l.toId)),
+      hidden: this.hiddenFrom(scope, alive)
     }
   }
 
@@ -832,6 +841,40 @@ export class Repository {
       .prepare(`SELECT * FROM links WHERE from_id IN (${ph}) AND to_id IN (${ph})`)
       .all(...ids, ...ids) as LinkRow[]
     return rows.map(rowToLink)
+  }
+
+  /** Every link with at least ONE endpoint inside `ids`. */
+  private linksTouching(ids: string[]): Link[] {
+    if (!ids.length) return []
+    const ph = ids.map(() => '?').join(',')
+    const rows = this.db
+      .prepare(`SELECT * FROM links WHERE from_id IN (${ph}) OR to_id IN (${ph})`)
+      .all(...ids, ...ids) as LinkRow[]
+    return rows.map(rowToLink)
+  }
+
+  /**
+   * TheBrain "More" gates: for each scoped thought, the link neighbors that
+   * are themselves NOT in scope (parents above / children below / jumps).
+   */
+  private hiddenFrom(scope: Set<string>, links: Link[]): Record<string, HiddenCounts> {
+    const out: Record<string, HiddenCounts> = {}
+    const add = (id: string, dir: keyof HiddenCounts, other: string) => {
+      const h = (out[id] ??= { parents: [], children: [], jumps: [] })
+      if (!h[dir].includes(other)) h[dir].push(other)
+    }
+    for (const l of links) {
+      const inA = scope.has(l.fromId)
+      const inB = scope.has(l.toId)
+      if (l.type === 'child') {
+        if (inA && !inB) add(l.fromId, 'children', l.toId)
+        else if (inB && !inA) add(l.toId, 'parents', l.fromId)
+      } else if (inA !== inB) {
+        if (inA) add(l.fromId, 'jumps', l.toId)
+        else add(l.toId, 'jumps', l.fromId)
+      }
+    }
+    return out
   }
 
   private insertLink(fromId: string, toId: string, type: LinkType): Link | null {

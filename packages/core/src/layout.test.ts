@@ -22,7 +22,8 @@ const empty: Omit<Viewport, 'focus'> = {
   children: [],
   jumps: [],
   siblings: [],
-  intimacy: {}
+  intimacy: {},
+  hidden: {}
 }
 
 describe('layoutViewport', () => {
@@ -212,5 +213,28 @@ describe('boxAnchor', () => {
     const p = boxAnchor(node, { x: 0, y: -500 })
     expect(p.x).toBeCloseTo(0)
     expect(p.y).toBeCloseTo(-20)
+  })
+})
+
+describe('More-gate counts', () => {
+  it('attaches hidden-neighbor counts to positioned nodes', () => {
+    const layout = layoutViewport({
+      focus: t('f'),
+      ...empty,
+      children: [t('c')],
+      hidden: { c: { parents: [], children: ['grandchild', 'sib'], jumps: [] } }
+    })
+    expect(layout.byId['f'].hidden).toBeUndefined()
+    expect(layout.byId['c'].hidden).toEqual({ parents: 0, children: 2, jumps: 0 })
+  })
+
+  it('omits hidden when every direction is empty', () => {
+    const layout = layoutViewport({
+      focus: t('f'),
+      ...empty,
+      children: [t('c')],
+      hidden: { c: { parents: [], children: [], jumps: [] } }
+    })
+    expect(layout.byId['c'].hidden).toBeUndefined()
   })
 })

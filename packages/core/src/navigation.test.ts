@@ -110,3 +110,15 @@ describe('computeIntimacy', () => {
     expect(scores['focus']).toBeUndefined()
   })
 })
+
+describe('computeViewport hidden pass-through', () => {
+  it('carries the More-gate map from neighborhood to viewport', () => {
+    const base = nb('focus', [t('focus'), t('kid')], [child('focus', 'kid')])
+    const vp = computeViewport({
+      ...base,
+      hidden: { kid: { parents: [], children: ['grandchild'], jumps: [] } }
+    })
+    expect(vp.hidden.kid.children).toEqual(['grandchild'])
+    expect(computeViewport(base).hidden).toEqual({})
+  })
+})

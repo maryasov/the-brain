@@ -98,6 +98,14 @@ console.log('POST /import/opml reuses names:', reOpml.thoughts === 0)
 const badImp = await j('POST', '/import', { not: 'a snapshot' })
 console.log('bad import rejected:', badImp.status === 400)
 
+// More-gates: a hidden (off-screen) grandchild reported on the shown child.
+const grand = (await j('POST', '/thoughts', { name: 'API Grandchild', parentId: created.id })).data
+const nbG = (await j('GET', `/neighborhood/${root.id}`)).data
+console.log(
+  'hidden More-gates ok:',
+  (nbG.hidden?.[created.id]?.children ?? []).includes(grand.id) && nbG.hidden?.[root.id] === undefined
+)
+
 const tAlive = Date.now()
 const del = await j('DELETE', `/thoughts/${created.id}?mode=cascade`)
 console.log('delete status:', del.status)

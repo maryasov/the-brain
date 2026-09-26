@@ -1,4 +1,4 @@
-import type { Thought } from '@the-brain/shared'
+import type { HiddenCounts, Thought } from '@the-brain/shared'
 import type { Neighborhood } from '@the-brain/shared'
 
 /**
@@ -21,6 +21,11 @@ export interface Viewport {
    * paths through a third thought); thoughts with score 0 are omitted.
    */
   intimacy: Record<string, number>
+  /**
+   * TheBrain "More" gates, passed through from the neighborhood: per thought,
+   * the ids of linked thoughts that are NOT shown in this viewport.
+   */
+  hidden: Record<string, HiddenCounts>
 }
 
 /**
@@ -68,7 +73,8 @@ export function computeViewport(nb: Neighborhood): Viewport {
     children: pick(childIds),
     jumps: pick(jumpIds),
     siblings: pick(siblingIds),
-    intimacy: computeIntimacy(nb)
+    intimacy: computeIntimacy(nb),
+    hidden: nb.hidden ?? {}
   }
 }
 

@@ -391,4 +391,21 @@ describe('Repository', () => {
     const svp = computeViewport(target.getNeighborhood(science.id)!)
     expect(svp.children.map((t) => t.name).sort()).toEqual(['Math', 'Physics'])
   })
+
+  it('reports hidden neighbors per thought for TheBrain More gates', () => {
+    const root = repo.getOrCreateRoot()
+    const a = repo.createThought({ name: 'HiddenA', parentId: root.id })
+    const b = repo.createThought({ name: 'HiddenB', parentId: a.id })
+    repo.createThought({ name: 'HiddenC', parentId: a.id })
+
+    const nb = repo.getNeighborhood(root.id)!
+    // Focused on root, A is shown but A's own children are off-screen; only
+    // in-scope thoughts get entries.
+    expect(nb.hidden?.[a.id].children).toHaveLength(2)
+    expect(nb.hidden?.[b.id]).toBeUndefined()
+    // The 1-hop focus never has hidden neighbors.
+    expect(nb.hidden?.[root.id]).toBeUndefined()
+    // Hidden thoughts are NOT part of the returned scope.
+    expect(nb.thoughts.map((t) => t.id)).not.toContain(b.id)
+  })
 })
