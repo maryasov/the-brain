@@ -1,4 +1,5 @@
 // Smoke-test the HTTP API against a running server (BASE env or :8791).
+import { writeFileSync, rmSync } from 'node:fs'
 const BASE = process.env.BASE ?? 'http://localhost:8791'
 const j = async (method, path, body) => {
   const res = await fetch(BASE + path, {
@@ -114,6 +115,14 @@ console.log(
   'attach badge ok:',
   nbA.attachCounts?.[created.id]?.total === 2 && nbA.attachCounts[created.id].urls === 1
 )
+
+// Attachment full text: search hits the CONTENT of an attached text file.
+const txt = `/tmp/brain-api-smoke-${Date.now()}.md`
+writeFileSync(txt, 'Contains the coined word flibberzanz for smoke tests.\n')
+await j('POST', '/attachments', { thoughtId: created.id, kind: 'file', uri: txt })
+const ftsHit = ((await j('GET', '/search?q=flibberzanz')).data ?? []).find((h) => h.id === created.id)
+console.log('attach fts ok:', ftsHit?.via === 'attachment' && (ftsHit.snippet ?? '').includes('[flibberzanz]'))
+rmSync(txt)
 
 const tAlive = Date.now()
 const del = await j('DELETE', `/thoughts/${created.id}?mode=cascade`)

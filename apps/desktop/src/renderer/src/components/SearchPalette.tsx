@@ -79,7 +79,12 @@ export function SearchPalette({ onSelect, onClose }: Props) {
               onClick={() => onSelect(h.id)}
             >
               <span className="title">{h.name}</span>
-              {h.snippet && <span className="sub">{h.snippet}</span>}
+              {h.snippet && (
+                <span className="sub">
+                  {h.via === 'attachment' && h.source ? `in ${h.source}: ` : ''}
+                  {h.snippet}
+                </span>
+              )}
             </div>
           ))}
         </div>

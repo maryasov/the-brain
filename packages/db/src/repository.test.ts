@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'
+import { writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { migrate } from './migrations.js'
 import { Repository, buildFtsQuery } from './repository.js'
 import { computeViewport } from '@the-brain/core'
@@ -419,5 +422,32 @@ describe('Repository', () => {
     expect(nb.attachCounts?.[root.id]).toBeUndefined()
     // As-of replays omit the badge map (attachments are not journaled).
     expect(repo.getNeighborhoodAsOf(root.id, Date.now())?.attachCounts).toBeUndefined()
+  })
+
+  it('finds thoughts by attached file content via attach_fts', () => {
+    const path = join(tmpdir(), `brain-fts-${Date.now()}-${Math.random()}.md`)
+    writeFileSync(path, 'The glorpzoid hypothesis states nothing useful.\n')
+    try {
+      const root = repo.getOrCreateRoot()
+      const th = repo.createThought({ name: 'FTS File', parentId: root.id })
+      const att = repo.addAttachment({ thoughtId: th.id, kind: 'file', uri: path, label: 'notes' })
+      const hit = repo.search('glorpzoid').find((h) => h.id === th.id)
+      expect(hit?.via).toBe('attachment')
+      expect(hit?.source).toBe('notes')
+      // Removing the attachment drops the index row.
+      repo.removeAttachment(th.id, att.id)
+      expect(repo.search('glorpzoid').some((h) => h.id === th.id)).toBe(false)
+      // Cascade delete cleans up even though the attachment row FK-cascades.
+      repo.addAttachment({ thoughtId: th.id, kind: 'file', uri: path })
+      expect(repo.search('glorpzoid').some((h) => h.id === th.id)).toBe(true)
+      repo.deleteThought(th.id, { mode: 'cascade' })
+      expect(repo.search('glorpzoid').some((h) => h.id === th.id)).toBe(false)
+      // Non-whitelisted extensions are never indexed.
+      const th2 = repo.createThought({ name: 'FTS Bin', parentId: root.id })
+      repo.addAttachment({ thoughtId: th2.id, kind: 'file', uri: path.replace(/\.md$/, '.zip') })
+      expect(repo.search('glorpzoid').some((h) => h.id === th2.id)).toBe(false)
+    } finally {
+      rmSync(path)
+    }
   })
 })

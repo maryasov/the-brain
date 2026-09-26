@@ -183,4 +183,23 @@ export function migrate(db: Database.Database): void {
     `
     )
   }
+
+  if (current < 7) {
+    run(
+      7,
+      `
+      -- Attachment full text: extracted bodies of local text files, so search
+      -- hits the CONTENT of attached material (TheBrain indexes extracted
+      -- text too). Maintained by the repository on add/remove/cascade — not
+      -- by triggers, because the source is a file path, not a table column.
+      CREATE VIRTUAL TABLE attach_fts USING fts5(
+        attachment_id UNINDEXED,
+        thought_id    UNINDEXED,
+        source        UNINDEXED,
+        body,
+        tokenize = 'porter unicode61'
+      );
+    `
+    )
+  }
 }

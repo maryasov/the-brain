@@ -67,7 +67,9 @@ animates the whole map, so you think in relationships instead of folders.
   show a small count pill on their top-right corner, with a ↗ when one of them
   is an external link — the numbers come straight from the neighborhood's
   `attachCounts` map, so API/MCP clients see them too.
-- Full-text search palette (SQLite FTS5) to find and focus any thought.
+- Full-text search palette (SQLite FTS5) to find and focus any thought — it
+  also reads **inside attached text files** (txt/md/code, size-capped
+  extraction indexed into `attach_fts`; hits show as “in <file>: …”).
 - Pinboard for quick jumps, plus per-thought tags.
 - Agent access: MCP server + HTTP API over the same database, including full
   remote control of the running window (navigate, UI actions, screenshots)
@@ -163,6 +165,9 @@ pnpm api           # start the HTTP JSON API on 127.0.0.1:8788
   parent→child) or `jump` (undirected). Siblings are **derived**, never stored.
 - `attachments`, `tags`, `thought_tags` for anchors/labels.
 - `thoughts_fts` — an FTS5 index kept in sync by triggers on `thoughts`.
+- `attach_fts` — an FTS5 index of text extracted from attached local files,
+  maintained by the repository on add/remove/cascade (search hits from it
+  carry `via: "attachment"` and the file's label).
 - `sets(id, name, description, def_json, …)` — saved filtered sets; `def_json`
   holds `{text?, type?, tag?}`, interpreted (AND-ed) by the repository.
 
@@ -295,7 +300,8 @@ grabbing the pointer:
   `delete_set {setId}` (filtered sets; `run_set` opens the Sets panel), `set_dialog` (open/close
   the create/rename/delete modal), `link`, `sim_drag` (replays a drag gesture
   through the real DOM handlers), `sim_click {dx,dy}` (replays a click offset
-  from a node — verifies gate/zone routing), `hover {id}` (replays a mousemove
+  from a node — verifies gate/zone routing), `search {q}` (runs the palette's
+  FTS search, including attached-file-content hits), `hover {id}` (replays a mousemove
   over a node and waits out the tooltip delay; empty id hides it), `set_asof {t}`
     (Back in Time: `t>0` rewinds the canvas to that timestamp, anything else
     returns it to the present; read-only while rewound), `add_attachment` /

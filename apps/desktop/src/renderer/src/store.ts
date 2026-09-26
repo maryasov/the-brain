@@ -567,6 +567,7 @@ window.__brainDebug = debugView
 type RpcArgs = {
   id?: string
   name?: string
+  q?: string
   dir?: string
   mode?: string
   pinned?: boolean
@@ -589,6 +590,9 @@ window.__brainRpc = async (method: string, args: RpcArgs = {}) => {
   switch (method) {
     case 'get_view':
       return debugView()
+    case 'search':
+      // Run the palette's FTS search (thought text + attached file content).
+      return await window.brain.search(String(args.q ?? ''))
     case 'reload': // re-read the neighborhood (e.g. after external API writes)
       await s().reload()
       return debugView()

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { buildOpml, parseOpml, type OpmlNode } from '@the-brain/core'
+import { extractText, fileSource } from './extract.js'
 import {
   rowToAttachment,
   rowToEvent,
@@ -317,7 +318,32 @@ export class Repository {
           LIMIT 50`
       )
       .all(match) as Array<{ id: string; name: string; snippet: string | null }>
-    return rows.map((r) => ({ id: r.id, name: r.name, snippet: r.snippet }))
+    const hits: SearchHit[] = rows.map((r) => ({ id: r.id, name: r.name, snippet: r.snippet }))
+
+    // Attachment content hits: same query against extracted file bodies,
+    // merged after the direct hits (deduped per thought). The JOIN on
+    // attachments also drops rows orphaned by FK-cascaded deletes.
+    const seen = new Set(hits.map((h) => h.id))
+    const att = this.db
+      .prepare(
+        `SELECT f.thought_id AS id,
+                t.name AS name,
+                f.source AS source,
+                snippet(attach_fts, 3, '[', ']', ' … ', 12) AS snippet
+           FROM attach_fts f
+           JOIN thoughts t ON t.id = f.thought_id
+           JOIN attachments a ON a.id = f.attachment_id
+          WHERE attach_fts MATCH ?
+          ORDER BY rank
+          LIMIT 25`
+      )
+      .all(match) as Array<{ id: string; name: string; source: string; snippet: string | null }>
+    for (const r of att) {
+      if (seen.has(r.id)) continue
+      seen.add(r.id)
+      hits.push({ id: r.id, name: r.name, snippet: r.snippet, via: 'attachment', source: r.source })
+    }
+    return hits
   }
 
   listPinned(): Thought[] {
@@ -494,10 +520,18 @@ export class Repository {
       )
       .run(id, input.thoughtId, input.kind, uri, input.label?.trim() || null, input.mime ?? null, now())
     const row = this.db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as AttachmentRow
+    // Full-text index for local text files (best-effort; see extract.ts).
+    const body = extractText(input.kind, uri)
+    if (body) {
+      this.db
+        .prepare('INSERT INTO attach_fts (attachment_id, thought_id, source, body) VALUES (?, ?, ?, ?)')
+        .run(id, input.thoughtId, input.label?.trim() || fileSource(uri), body)
+    }
     return rowToAttachment(row)
   }
 
   removeAttachment(thoughtId: string, id: string): Attachment[] {
+    this.db.prepare('DELETE FROM attach_fts WHERE attachment_id = ?').run(id)
     this.db
       .prepare('DELETE FROM attachments WHERE id = ? AND thought_id = ?')
       .run(id, thoughtId)
@@ -623,6 +657,7 @@ export class Repository {
           createdAt: r.created_at,
           updatedAt: r.updated_at
         })
+      this.db.prepare(`DELETE FROM attach_fts WHERE thought_id IN (${placeholders})`).run(...doomed)
       this.db.prepare(`DELETE FROM thoughts WHERE id IN (${placeholders})`).run(...doomed)
     })
     del()

@@ -80,6 +80,10 @@ export interface SearchHit {
   id: string;
   name: string;
   snippet: string | null;
+  /** Set when the hit came from attached file CONTENT, not the thought text. */
+  via?: 'attachment';
+  /** Origin label for attachment hits (the file's basename). */
+  source?: string;
 }
 
 /** A user-defined label that can be attached to many thoughts. */

@@ -3,6 +3,7 @@
 // Uses an isolated DB (BRAIN_DB_PATH) so the real brain is untouched.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { writeFileSync, rmSync } from 'node:fs'
 
 const transport = new StdioClientTransport({
   command: 'pnpm',
@@ -140,6 +141,14 @@ console.log(
   'attach badge ok:',
   nbA.attachCounts?.[created.id]?.total === 2 && nbA.attachCounts[created.id].urls === 1
 )
+
+// Attachment full text: search hits the CONTENT of an attached text file.
+const txt = `/tmp/brain-mcp-smoke-${Date.now()}.md`
+writeFileSync(txt, 'Contains the coined word flibberzanz for smoke tests.\n')
+await call('brain_add_attachment', { thoughtId: created.id, kind: 'file', uri: txt })
+const ftsHit = (await call('brain_search', { query: 'flibberzanz' })).find((h) => h.id === created.id)
+console.log('attach fts ok:', ftsHit?.via === 'attachment' && (ftsHit.snippet ?? '').includes('[flibberzanz]'))
+rmSync(txt)
 
 const tAlive = Date.now()
 await call('brain_delete_thought', { id: created.id, mode: 'cascade' })
