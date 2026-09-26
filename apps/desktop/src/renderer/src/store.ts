@@ -556,6 +556,12 @@ const debugView = () => {
         h: n.h,
         ...(n.hidden ? { hidden: n.hidden } : {}),
         ...(n.attach ? { attach: n.attach } : {})
+      })) ?? null,
+    edges:
+      s.layout?.edges.map((e) => ({
+        id: e.id,
+        intimacy: e.intimacy,
+        ...(e.label ? { label: e.label } : {})
       })) ?? null
   }
 }

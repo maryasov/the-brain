@@ -142,6 +142,18 @@ console.log(
   nbA.attachCounts?.[created.id]?.total === 2 && nbA.attachCounts[created.id].urls === 1
 )
 
+// Named relationships: brain_link_info stamps the link, neighborhood carries it.
+const lbl = await call('brain_link_info', {
+  fromId: root.id,
+  toId: created.id,
+  type: 'child',
+  label: 'owns',
+  notes: 'smoke note'
+})
+const nbL = await call('brain_get_neighborhood', { focusId: created.id })
+const lblRow = nbL.links.find((l) => l.id === lbl.id)
+console.log('link label ok:', lbl.label === 'owns' && lblRow?.notes === 'smoke note')
+
 // Attachment full text: search hits the CONTENT of an attached text file.
 const txt = `/tmp/brain-mcp-smoke-${Date.now()}.md`
 writeFileSync(txt, 'Contains the coined word flibberzanz for smoke tests.\n')

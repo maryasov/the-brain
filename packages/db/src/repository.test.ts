@@ -451,3 +451,59 @@ describe('Repository', () => {
     }
   })
 })
+
+describe('named relationships (link label/notes)', () => {
+  let repo: Repository
+  beforeEach(() => {
+    repo = freshRepo()
+  })
+
+  it('creates a link carrying its label and notes', () => {
+    const root = repo.getOrCreateRoot()
+    const kid = repo.createThought({ name: 'Kid', parentId: root.id })
+    const link = repo.link({ fromId: root.id, toId: kid.id, type: 'child', label: ' owns ', notes: 'since 2019' })
+    expect(link.label).toBe('owns') // trimmed on write
+    expect(link.notes).toBe('since 2019')
+    const stored = repo.getNeighborhood(kid.id)!.links.find((l) => l.id === link.id)!
+    expect(stored.label).toBe('owns')
+    expect(stored.notes).toBe('since 2019')
+  })
+
+  it('relinking an existing pair refreshes provided info only', () => {
+    const root = repo.getOrCreateRoot()
+    const kid = repo.createThought({ name: 'Kid2', parentId: root.id })
+    const first = repo.link({ fromId: root.id, toId: kid.id, type: 'child', label: 'funds' })
+    // Same triple without info: untouched.
+    expect(repo.link({ fromId: root.id, toId: kid.id, type: 'child' }).label).toBe('funds')
+    // Same triple with new label: refreshed, notes kept.
+    expect(repo.link({ fromId: root.id, toId: kid.id, type: 'child', label: 'sponsors' }).label).toBe('sponsors')
+    expect(repo.getNeighborhood(kid.id)!.links.find((l) => l.fromId === root.id && l.type === 'child')?.id).toBe(
+      first.id
+    )
+    // Notes were never provided, so they stay clear.
+    expect(repo.getNeighborhood(kid.id)!.links.find((l) => l.id === first.id)?.notes).toBeNull()
+  })
+
+  it('setLinkInfo updates, clears, and normalizes jump direction', () => {
+    const root = repo.getOrCreateRoot()
+    const a = repo.createThought({ name: 'A' })
+    const b = repo.createThought({ name: 'B', parentId: root.id })
+    repo.link({ fromId: a.id, toId: b.id, type: 'jump', label: 'mirrors' })
+    // Address the jump from the other direction: same row.
+    const updated = repo.setLinkInfo({ fromId: b.id, toId: a.id, type: 'jump', notes: 'checked' })
+    expect(updated?.label).toBe('mirrors') // omitted = unchanged
+    expect(updated?.notes).toBe('checked')
+    // Blank string clears.
+    expect(repo.setLinkInfo({ fromId: a.id, toId: b.id, type: 'jump', label: '  ' })?.label).toBeNull()
+    expect(repo.setLinkInfo({ fromId: 'nope', toId: b.id, type: 'jump' })).toBeNull()
+  })
+
+  it('neighborhood links expose label/notes to the viewport map', () => {
+    const root = repo.getOrCreateRoot()
+    const kid = repo.createThought({ name: 'Kid3', parentId: root.id })
+    repo.link({ fromId: root.id, toId: kid.id, type: 'child', label: 'runs' })
+    const nb = repo.getNeighborhood(kid.id)!
+    const vp = computeViewport(nb)
+    expect(vp.linkLabels[`parent:${root.id}`]?.label).toBe('runs')
+  })
+})

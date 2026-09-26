@@ -22,6 +22,7 @@ import {
   type HiddenCounts,
   type ImportResult,
   type Link,
+  type LinkInfoInput,
   type LinkInput,
   type LinkRow,
   type LinkType,
@@ -242,7 +243,17 @@ export class Repository {
         links.some((l) => l.id === e.subject_id)
       )
         continue
-      links.push({ id: e.subject_id, fromId: p.fromId, toId: p.toId, type: p.type, createdAt: p.createdAt })
+      // The journal doesn't track label/notes edits, so a replayed link
+      // comes back without them (the present-day row may still have some).
+      links.push({
+        id: e.subject_id,
+        fromId: p.fromId,
+        toId: p.toId,
+        type: p.type,
+        createdAt: p.createdAt,
+        label: null,
+        notes: null
+      })
     }
     const alive = links.filter((l) => byId.has(l.fromId) && byId.has(l.toId))
 
@@ -668,7 +679,30 @@ export class Repository {
     const to = input.fromId < input.toId ? input.toId : input.fromId
     // Normalize jump direction so a<->b and b<->a collapse to one row.
     const [a, b] = input.type === 'jump' ? [from, to] : [input.fromId, input.toId]
-    return this.insertLink(a, b, input.type) ?? this.findLink(a, b, input.type)!
+    const label = input.label?.trim() || null
+    const notes = input.notes?.trim() || null
+    if (this.findLink(a, b, input.type)) {
+      // Relinking an existing pair refreshes the info when it was provided.
+      if (label || notes)
+        return this.setLinkInfo({ fromId: a, toId: b, type: input.type, label, notes })!
+      return this.findLink(a, b, input.type)!
+    }
+    return this.insertLink(a, b, input.type, label, notes) ?? this.findLink(a, b, input.type)!
+  }
+
+  /** Set/clear a link's label/notes by its (from,to,type) triple. */
+  setLinkInfo(input: LinkInfoInput): Link | null {
+    const from = input.fromId < input.toId ? input.fromId : input.toId
+    const to = input.fromId < input.toId ? input.toId : input.fromId
+    const [a, b] = input.type === 'jump' ? [from, to] : [input.fromId, input.toId]
+    const current = this.findLink(a, b, input.type)
+    if (!current) return null
+    // Omitted field = leave unchanged; null or blank string = clear.
+    const label = input.label === undefined ? current.label : input.label?.trim() || null
+    const notes = input.notes === undefined ? current.notes : input.notes?.trim() || null
+    if (label !== current.label || notes !== current.notes)
+      this.db.prepare('UPDATE links SET label = ?, notes = ? WHERE id = ?').run(label, notes, current.id)
+    return { ...current, label, notes }
   }
 
   unlink(fromId: string, toId: string, type: LinkType): void {
@@ -932,14 +966,20 @@ export class Repository {
     return out
   }
 
-  private insertLink(fromId: string, toId: string, type: LinkType): Link | null {
+  private insertLink(
+    fromId: string,
+    toId: string,
+    type: LinkType,
+    label: string | null = null,
+    notes: string | null = null
+  ): Link | null {
     if (fromId === toId) return null
     const id = randomUUID()
     const changes = this.db
       .prepare(
-        'INSERT OR IGNORE INTO links (id, from_id, to_id, type, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT OR IGNORE INTO links (id, from_id, to_id, type, created_at, label, notes) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .run(id, fromId, toId, type, now()).changes
+      .run(id, fromId, toId, type, now(), label, notes).changes
     if (changes) {
       this.logEvent('link_created', id, {
         fromId,

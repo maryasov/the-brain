@@ -8,6 +8,7 @@ import {
   type CreateThoughtInput,
   type DeleteOptions,
   type LinkInput,
+  type LinkInfoInput,
   type LinkType,
   type UpdateThoughtInput
 } from '@the-brain/shared'
@@ -28,6 +29,7 @@ const api: BrainApi = {
   link: (input: LinkInput) => ipcRenderer.invoke(IPC.link, input),
   unlink: (fromId: string, toId: string, type: LinkType) =>
     ipcRenderer.invoke(IPC.unlink, fromId, toId, type),
+  setLinkInfo: (input: LinkInfoInput) => ipcRenderer.invoke(IPC.setLinkInfo, input),
   search: (query: string) => ipcRenderer.invoke(IPC.search, query),
   getOrCreateRoot: () => ipcRenderer.invoke(IPC.getOrCreateRoot),
   listRecent: (limit?: number) => ipcRenderer.invoke(IPC.listRecent, limit),

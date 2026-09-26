@@ -9,6 +9,7 @@ import {
   type CreateThoughtInput,
   type DeleteOptions,
   type LinkInput,
+  type LinkInfoInput,
   type LinkType,
   type UpdateThoughtInput
 } from '@the-brain/shared'
@@ -46,6 +47,7 @@ export function registerIpc(): void {
   ipcMain.handle(IPC.unlink, (_e, fromId: string, toId: string, type: LinkType) =>
     r().unlink(fromId, toId, type)
   )
+  ipcMain.handle(IPC.setLinkInfo, (_e, input: LinkInfoInput) => r().setLinkInfo(input))
   ipcMain.handle(IPC.search, (_e, query: string) => r().search(query))
   ipcMain.handle(IPC.getOrCreateRoot, () => r().getOrCreateRoot())
   ipcMain.handle(IPC.listRecent, (_e, limit?: number) => r().listRecent(limit))

@@ -45,6 +45,8 @@ export interface PositionedEdge {
   toSide: Side
   /** TheBrain intimacy of the target vs the focus; render the number when > 1. */
   intimacy: number
+  /** Relationship name from the underlying link, drawn along the curve. */
+  label?: string
   /** Static anchors at layout time (used by tests / non-animated fallbacks). */
   from: Point
   to: Point
@@ -220,6 +222,9 @@ export function layoutViewport(vp: Viewport): Layout {
       fromSide,
       toSide,
       intimacy: vp.intimacy[target.id] ?? 1,
+      ...(vp.linkLabels[`${kind}:${target.id}`]?.label
+        ? { label: vp.linkLabels[`${kind}:${target.id}`].label! }
+        : {}),
       from: sideAnchor(source, fromSide),
       to: sideAnchor(target, toSide)
     })

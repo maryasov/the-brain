@@ -17,7 +17,7 @@ function t(id: string): Thought {
 }
 
 function l(fromId: string, toId: string, type: Link['type'] = 'child'): Link {
-  return { id: `${fromId}-${toId}`, fromId, toId, type, createdAt: 0 }
+  return { id: `${fromId}-${toId}`, fromId, toId, type, createdAt: 0, label: null, notes: null }
 }
 
 function nb(focus: string, thoughts: string[], links: Link[]): Neighborhood {

@@ -102,6 +102,7 @@ async function route(
             'POST /thoughts/:id/pin',
             'DELETE /thoughts/:id?mode=detach|cascade',
             'POST /links',
+            'PUT /links',
             'DELETE /links',
             'POST /tags',
             'DELETE /tags',
@@ -230,9 +231,24 @@ async function route(
       data: repo.link({
         fromId: asStr(body.fromId) ?? '',
         toId: asStr(body.toId) ?? '',
-        type: (asStr(body.type) as LinkType) ?? 'child'
+        type: (asStr(body.type) as LinkType) ?? 'child',
+        label: asStr(body.label),
+        notes: asStr(body.notes)
       })
     }
+  }
+  // Update a link's label/notes. Omitted fields stay unchanged; empty
+  // strings clear them. Jumps resolve in either direction, like DELETE.
+  if (method === 'PUT' && head === 'links') {
+    const link = repo.setLinkInfo({
+      fromId: asStr(body.fromId) ?? '',
+      toId: asStr(body.toId) ?? '',
+      type: (asStr(body.type) as LinkType) ?? 'child',
+      ...(body.label !== undefined ? { label: asStr(body.label) } : {}),
+      ...(body.notes !== undefined ? { notes: asStr(body.notes) } : {})
+    })
+    if (!link) return { status: 404, data: { error: 'no such link' } }
+    return { status: 200, data: link }
   }
   if (method === 'DELETE' && head === 'links') {
     repo.unlink(

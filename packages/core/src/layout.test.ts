@@ -24,7 +24,8 @@ const empty: Omit<Viewport, 'focus'> = {
   siblings: [],
   intimacy: {},
   hidden: {},
-  attachCounts: {}
+  attachCounts: {},
+  linkLabels: {}
 }
 
 describe('layoutViewport', () => {
@@ -248,5 +249,17 @@ describe('More-gate counts', () => {
     })
     expect(layout.byId['c'].attach).toEqual({ total: 3, urls: 1 })
     expect(layout.byId['d'].attach).toBeUndefined()
+  })
+
+  it('draws relationship labels on the matching edge only', () => {
+    const layout = layoutViewport({
+      focus: t('f'),
+      ...empty,
+      children: [t('c'), t('d')],
+      linkLabels: { 'child:c': { id: 'l1', label: 'causes', notes: 'why' } }
+    })
+    const labeled = layout.edges.find((e) => e.id === 'child:c')
+    expect(labeled?.label).toBe('causes')
+    expect(layout.edges.find((e) => e.id === 'child:d')?.label).toBeUndefined()
   })
 })

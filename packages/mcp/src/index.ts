@@ -329,13 +329,31 @@ const TOOLS = [
   {
     name: 'brain_link',
     description:
-      'Create a link. type="child" is directed (fromId=parent -> toId=child); type="jump" is an undirected association.',
+      'Create a link. type="child" is directed (fromId=parent -> toId=child); type="jump" is an undirected association. Optional label (relationship name drawn on the edge) and notes.',
     inputSchema: {
       type: 'object',
       properties: {
         fromId: { type: 'string' },
         toId: { type: 'string' },
-        type: { type: 'string', enum: ['child', 'jump'] }
+        type: { type: 'string', enum: ['child', 'jump'] },
+        label: { type: 'string' },
+        notes: { type: 'string' }
+      },
+      required: ['fromId', 'toId', 'type']
+    }
+  },
+  {
+    name: 'brain_link_info',
+    description:
+      'Set or clear a link\'s label and notes (named relationships), addressed by its fromId/toId/type triple (jumps match in either direction). Omitted fields stay unchanged; an empty string clears.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fromId: { type: 'string' },
+        toId: { type: 'string' },
+        type: { type: 'string', enum: ['child', 'jump'] },
+        label: { type: 'string' },
+        notes: { type: 'string' }
       },
       required: ['fromId', 'toId', 'type']
     }
@@ -502,7 +520,17 @@ async function handle(name: string, a: Args): Promise<unknown> {
       return repo.link({
         fromId: str(a, 'fromId'),
         toId: str(a, 'toId'),
-        type: str(a, 'type') as LinkType
+        type: str(a, 'type') as LinkType,
+        label: a.label === undefined ? undefined : String(a.label),
+        notes: a.notes === undefined ? undefined : String(a.notes)
+      })
+    case 'brain_link_info':
+      return repo.setLinkInfo({
+        fromId: str(a, 'fromId'),
+        toId: str(a, 'toId'),
+        type: str(a, 'type') as LinkType,
+        label: a.label === undefined ? undefined : String(a.label),
+        notes: a.notes === undefined ? undefined : String(a.notes)
       })
     case 'brain_unlink':
       repo.unlink(str(a, 'fromId'), str(a, 'toId'), str(a, 'type') as LinkType)

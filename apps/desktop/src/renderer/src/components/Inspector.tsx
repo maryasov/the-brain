@@ -5,6 +5,7 @@ import {
   type Attachment,
   type AttachmentKind,
   type BrainEvent,
+  type Link,
   type Thought
 } from '@the-brain/shared'
 import { typeIcon } from '../typeIcons.js'
@@ -27,18 +28,25 @@ export function Inspector() {
   const openAttachment = useBrain((s) => s.openAttachment)
   const history = useBrain((s) => s.history)
   const asOf = useBrain((s) => s.asOf)
+  const neighborhood = useBrain((s) => s.neighborhood)
+  const reload = useBrain((s) => s.reload)
 
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [type, setType] = useState('')
   const [attKind, setAttKind] = useState<AttachmentKind>('url')
   const [attUri, setAttUri] = useState('')
+  // Inline editor for one link's label/notes (named relationships).
+  const [editing, setEditing] = useState<Link | null>(null)
+  const [relLabel, setRelLabel] = useState('')
+  const [relNotes, setRelNotes] = useState('')
 
   // Re-seed the inline editors whenever focus moves to another thought.
   useEffect(() => {
     setName(focus?.name ?? '')
     setDesc(focus?.description ?? '')
     setType(focus?.type ?? '')
+    setEditing(null)
   }, [focus?.id, focus?.type]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open || !focus) return null
@@ -64,6 +72,23 @@ export function Inspector() {
     if (past || !attUri.trim()) return
     await addAttachment(attKind, attUri)
     setAttUri('')
+  }
+  const openLinkEditor = (l: Link) => {
+    setEditing(l)
+    setRelLabel(l.label ?? '')
+    setRelNotes(l.notes ?? '')
+  }
+  const saveLinkInfo = async () => {
+    if (!editing) return
+    await window.brain.setLinkInfo({
+      fromId: editing.fromId,
+      toId: editing.toId,
+      type: editing.type,
+      label: relLabel,
+      notes: relNotes
+    })
+    setEditing(null)
+    await reload()
   }
 
   return (
@@ -188,14 +213,101 @@ export function Inspector() {
 
       {viewport && (
         <div className="links">
-          <LinkGroup label="Parents" items={viewport.parents} onJump={focusThought} />
-          <LinkGroup label="Children" items={viewport.children} onJump={focusThought} />
-          <LinkGroup label="Siblings" items={viewport.siblings} onJump={focusThought} />
-          <LinkGroup label="Jumps" items={viewport.jumps} onJump={focusThought} />
+          <LinkGroup
+            label="Parents"
+            items={viewport.parents}
+            onJump={focusThought}
+            editingId={editing?.id}
+            past={past}
+            onEdit={openLinkEditor}
+            find={(t) =>
+              neighborhood?.links.find((l) => l.type === 'child' && l.fromId === t.id && l.toId === focus.id)
+            }
+          />
+          <LinkGroup
+            label="Children"
+            items={viewport.children}
+            onJump={focusThought}
+            editingId={editing?.id}
+            past={past}
+            onEdit={openLinkEditor}
+            find={(t) =>
+              neighborhood?.links.find((l) => l.type === 'child' && l.fromId === focus.id && l.toId === t.id)
+            }
+          />
+          <LinkGroup
+            label="Siblings"
+            items={viewport.siblings}
+            onJump={focusThought}
+            editingId={editing?.id}
+            past={past}
+            onEdit={openLinkEditor}
+            find={(t) => {
+              // Sibling edges hang off the shared parent; prefer a labeled one.
+              let fallback: Link | undefined
+              for (const p of viewport.parents) {
+                const l = neighborhood?.links.find(
+                  (x) => x.type === 'child' && x.fromId === p.id && x.toId === t.id
+                )
+                if (l?.label) return l
+                fallback ??= l
+              }
+              return fallback
+            }}
+          />
+          <LinkGroup
+            label="Jumps"
+            items={viewport.jumps}
+            onJump={focusThought}
+            editingId={editing?.id}
+            past={past}
+            onEdit={openLinkEditor}
+            find={(t) =>
+              neighborhood?.links.find(
+                (l) =>
+                  l.type === 'jump' &&
+                  ((l.fromId === focus.id && l.toId === t.id) || (l.fromId === t.id && l.toId === focus.id))
+              )
+            }
+          />
+          {editing && !past && (
+            <div className="rel-editor">
+              <h4>
+                Relationship · {otherEndName(editing, focus.id, neighborhood?.thoughts ?? [])}
+              </h4>
+              <input
+                autoFocus
+                placeholder="label (e.g. causes, funds)"
+                value={relLabel}
+                onChange={(e) => setRelLabel(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void saveLinkInfo()}
+              />
+              <textarea
+                rows={2}
+                placeholder="notes about this relationship…"
+                value={relNotes}
+                onChange={(e) => setRelNotes(e.target.value)}
+              />
+              <div className="rel-actions">
+                <button className="link-btn" onClick={() => void saveLinkInfo()}>
+                  save
+                </button>
+                <button className="link-btn" onClick={() => setEditing(null)}>
+                  cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </aside>
   )
+}
+
+/** Display name of the far end of a link, from the loaded neighborhood. */
+function otherEndName(l: Link, focusId: string, thoughts: Thought[]): string {
+  const other = l.fromId === focusId ? l.toId : l.fromId
+  return thoughts.find((t) => t.id === other)?.name ?? other.slice(0, 8)
 }
 
 /** Human-readable journal line for the inspector's history section. */
@@ -239,11 +351,19 @@ function shorten(a: Attachment): string {
 function LinkGroup({
   label,
   items,
-  onJump
+  onJump,
+  find,
+  onEdit,
+  editingId,
+  past
 }: {
   label: string
   items: Thought[]
   onJump: (id: string) => Promise<void>
+  find?: (t: Thought) => Link | undefined
+  onEdit?: (l: Link) => void
+  editingId?: string
+  past?: boolean
 }) {
   if (items.length === 0) return null
   return (
@@ -251,12 +371,28 @@ function LinkGroup({
       <h4>
         {label} <span className="count">{items.length}</span>
       </h4>
-      {items.map((t) => (
-        <button key={t.id} className="link-row" onClick={() => void onJump(t.id)}>
-          {t.color && <span className="swatch" style={{ background: t.color }} />}
-          {t.name}
-        </button>
-      ))}
+      {items.map((t) => {
+        const l = find?.(t)
+        return (
+          <div key={t.id} className="link-row">
+            <button className="link-jump" onClick={() => void onJump(t.id)} title={l?.notes ?? undefined}>
+              {t.color && <span className="swatch" style={{ background: t.color }} />}
+              <span className="link-name">{t.name}</span>
+              {l?.label && <span className="rel">{l.label}</span>}
+            </button>
+            {l && !past && (
+              <button
+                className={`tag-x rel-edit${editingId === l.id ? ' on' : ''}`}
+                aria-label="Edit relationship"
+                title="Edit relationship label / notes"
+                onClick={() => onEdit?.(l)}
+              >
+                ✎
+              </button>
+            )}
+          </div>
+        )
+      })}
     </section>
   )
 }

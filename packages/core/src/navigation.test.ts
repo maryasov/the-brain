@@ -16,11 +16,27 @@ function t(id: string): Thought {
   }
 }
 
-function child(from: string, to: string): Link {
-  return { id: `${from}->${to}`, fromId: from, toId: to, type: 'child', createdAt: 0 }
+function child(from: string, to: string, label?: string): Link {
+  return {
+    id: `${from}->${to}`,
+    fromId: from,
+    toId: to,
+    type: 'child',
+    createdAt: 0,
+    label: label ?? null,
+    notes: null
+  }
 }
-function jump(a: string, b: string): Link {
-  return { id: `${a}<->${b}`, fromId: a, toId: b, type: 'jump', createdAt: 0 }
+function jump(a: string, b: string, label?: string): Link {
+  return {
+    id: `${a}<->${b}`,
+    fromId: a,
+    toId: b,
+    type: 'jump',
+    createdAt: 0,
+    label: label ?? null,
+    notes: null
+  }
 }
 
 function nb(focusId: string, thoughts: Thought[], links: Link[]): Neighborhood {
@@ -120,5 +136,29 @@ describe('computeViewport hidden pass-through', () => {
     })
     expect(vp.hidden.kid.children).toEqual(['grandchild'])
     expect(computeViewport(base).hidden).toEqual({})
+  })
+})
+
+describe('computeViewport linkLabels', () => {
+  it('keys named relationships by the edge signature, only for labeled links', () => {
+    const thoughts = [t('root'), t('focus'), t('kid'), t('assoc')]
+    const links = [
+      child('root', 'focus', 'funded by'),
+      child('focus', 'kid'), // no label -> absent
+      jump('focus', 'assoc', 'relates to')
+    ]
+    const vp = computeViewport(nb('focus', thoughts, links))
+    expect(vp.linkLabels['parent:root']).toMatchObject({ label: 'funded by' })
+    expect(vp.linkLabels['jump:assoc']).toMatchObject({ label: 'relates to' })
+    expect(vp.linkLabels['child:kid']).toBeUndefined()
+  })
+
+  it('a sibling edge takes the parent→sibling link label', () => {
+    // root -> focus, root -> sib (labeled); sib shows as a sibling of focus
+    const thoughts = [t('root'), t('focus'), t('sib')]
+    const links = [child('root', 'focus'), child('root', 'sib', 'co-authored')]
+    const vp = computeViewport(nb('focus', thoughts, links))
+    expect(vp.siblings.map((s) => s.id)).toEqual(['sib'])
+    expect(vp.linkLabels['sibling:sib']).toMatchObject({ label: 'co-authored' })
   })
 })

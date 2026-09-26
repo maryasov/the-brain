@@ -1,4 +1,4 @@
-import type { AttachCounts, HiddenCounts, Thought } from '@the-brain/shared'
+import type { AttachCounts, HiddenCounts, LinkInfo, Thought } from '@the-brain/shared'
 import type { Neighborhood } from '@the-brain/shared'
 
 /**
@@ -28,6 +28,12 @@ export interface Viewport {
   hidden: Record<string, HiddenCounts>
   /** Attachment badge counts (live views; empty for as-of replays). */
   attachCounts: Record<string, AttachCounts>
+  /**
+   * Named relationships: label/notes of the link behind each edge, keyed by
+   * the edge signature (`role:neighborId`, same ids the layout gives edges).
+   * Only links that actually carry a label appear here.
+   */
+  linkLabels: Record<string, LinkInfo>
 }
 
 /**
@@ -43,13 +49,29 @@ export function computeViewport(nb: Neighborhood): Viewport {
   const childIds = new Set<string>()
   const jumpIds = new Set<string>()
 
+  const linkLabels: Record<string, LinkInfo> = {}
+  const info = (l: (typeof nb.links)[number]): LinkInfo => ({ id: l.id, label: l.label, notes: l.notes })
+  const note = (key: string, l: (typeof nb.links)[number]) => {
+    if (l.label && !linkLabels[key]) linkLabels[key] = info(l)
+  }
+
   for (const l of nb.links) {
     if (l.type === 'child') {
-      if (l.toId === focusId) parentIds.add(l.fromId)
-      else if (l.fromId === focusId) childIds.add(l.toId)
+      if (l.toId === focusId) {
+        parentIds.add(l.fromId)
+        note(`parent:${l.fromId}`, l)
+      } else if (l.fromId === focusId) {
+        childIds.add(l.toId)
+        note(`child:${l.toId}`, l)
+      }
     } else if (l.type === 'jump') {
-      if (l.fromId === focusId) jumpIds.add(l.toId)
-      else if (l.toId === focusId) jumpIds.add(l.fromId)
+      if (l.fromId === focusId) {
+        jumpIds.add(l.toId)
+        note(`jump:${l.toId}`, l)
+      } else if (l.toId === focusId) {
+        jumpIds.add(l.fromId)
+        note(`jump:${l.fromId}`, l)
+      }
     }
   }
 
@@ -62,6 +84,9 @@ export function computeViewport(nb: Neighborhood): Viewport {
     for (const l of nb.links) {
       if (l.type === 'child' && l.fromId === parentId && !shown.has(l.toId)) {
         siblingIds.add(l.toId)
+        // The sibling edge is sourced at the parent, so the parent→sibling
+        // link's label is what belongs on it.
+        note(`sibling:${l.toId}`, l)
       }
     }
   }
@@ -77,7 +102,8 @@ export function computeViewport(nb: Neighborhood): Viewport {
     siblings: pick(siblingIds),
     intimacy: computeIntimacy(nb),
     hidden: nb.hidden ?? {},
-    attachCounts: nb.attachCounts ?? {}
+    attachCounts: nb.attachCounts ?? {},
+    linkLabels
   }
 }
 

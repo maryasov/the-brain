@@ -202,4 +202,17 @@ export function migrate(db: Database.Database): void {
     `
     )
   }
+
+  if (current < 8) {
+    run(
+      8,
+      `
+      -- Named relationships: a short label drawn along the edge ("causes",
+      -- "works at") plus longer notes only the inspector shows. TheBrain's
+      -- LinkRep carries both on every link.
+      ALTER TABLE links ADD COLUMN label TEXT;
+      ALTER TABLE links ADD COLUMN notes TEXT;
+    `
+    )
+  }
 }

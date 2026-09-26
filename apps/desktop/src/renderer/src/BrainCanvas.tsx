@@ -486,15 +486,30 @@ function drawEdge(
   ctx.arc(b.x, b.y, 2.6, 0, Math.PI * 2)
   ctx.fill()
 
+  // Named relationship: the link's label sits on the curve's midpoint, with a
+  // dark backing plate so it stays readable where edges overlap.
+  // Bezier point at t=0.5: (a + 3c1 + 3c2 + b) / 8.
+  const mx = (a.x + 3 * c1.x + 3 * c2.x + b.x) / 8
+  const my = (a.y + 3 * c1.y + 3 * c2.y + b.y) / 8
+  if (e.label) {
+    const text = e.label.length > 22 ? e.label.slice(0, 21) + '…' : e.label
+    ctx.font = '600 9px Inter, system-ui, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const w = ctx.measureText(text).width + 6
+    ctx.fillStyle = hexA('#0b1119', 0.85)
+    ctx.fillRect(mx - w / 2, my - 18.5, w, 13)
+    ctx.fillStyle = hexA(color, 0.95)
+    ctx.fillText(text, mx, my - 12 + 0.5)
+  }
+
   // Intimacy: the number of connections shows along strong links (>1).
   if (e.intimacy > 1) {
-    const mx = (a.x + b.x) / 2
-    const my = (a.y + b.y) / 2
     ctx.font = '600 10px Inter, system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = hexA(color, 0.95)
-    ctx.fillText(String(e.intimacy), mx, my)
+    ctx.fillText(String(e.intimacy), mx, e.label ? my + 9 : my)
   }
   ctx.restore()
 }

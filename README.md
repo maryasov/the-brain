@@ -22,7 +22,8 @@ animates the whole map, so you think in relationships instead of folders.
 
 - Four-zone focus layout (per TheBrain 13): parents above, children below in
   twin wings, jumps left, siblings right — on Canvas 2D with animated recentring,
-  gate dots on the focus, converging fan curves and intimacy numbers on links.
+  gate dots on the focus, converging fan curves, intimacy numbers and
+  relationship labels on links.
 - Typed relationships: **Parent / Child / Jump**, with **Siblings** derived.
 - **Thought types**: tag a thought as person, project, book, place… (or any
   custom label) — the node shows a matching icon, set it from the inspector.
@@ -67,6 +68,11 @@ animates the whole map, so you think in relationships instead of folders.
   show a small count pill on their top-right corner, with a ↗ when one of them
   is an external link — the numbers come straight from the neighborhood's
   `attachCounts` map, so API/MCP clients see them too.
+- **Named relationships**: any link can carry a short **label** (drawn along
+  its curve on the canvas) plus longer **notes** (shown in the inspector). Edit
+  them inline with the ✎ on a relationship row, or over the wire with
+  `PUT /links` / `brain_link_info` (addressed by the same from/to/type triple
+  as unlink; omitted fields stay unchanged, an empty string clears).
 - Full-text search palette (SQLite FTS5) to find and focus any thought — it
   also reads **inside attached text files** (txt/md/code, size-capped
   extraction indexed into `attach_fts`; hits show as “in <file>: …”).
@@ -161,8 +167,10 @@ pnpm api           # start the HTTP JSON API on 127.0.0.1:8788
 ## Data model (SQLite)
 
 - `thoughts(id, name, description, color, type, pinned, archived, created_at, updated_at)`
-- `links(id, from_id, to_id, type, created_at)` where `type` is `child` (directed
-  parent→child) or `jump` (undirected). Siblings are **derived**, never stored.
+- `links(id, from_id, to_id, type, created_at, label, notes)` where `type` is
+  `child` (directed parent→child) or `jump` (undirected); `label`/`notes` carry
+  an optional named relationship (the label is drawn on the edge). Siblings are
+  **derived**, never stored.
 - `attachments`, `tags`, `thought_tags` for anchors/labels.
 - `thoughts_fts` — an FTS5 index kept in sync by triggers on `thoughts`.
 - `attach_fts` — an FTS5 index of text extracted from attached local files,
@@ -207,6 +215,10 @@ location with `BRAIN_DB_PATH=/path/to/brain.db`.
   thought relates to the focus. We compute it in `@the-brain/core`
   (`computeIntimacy`: direct links + shared neighbors) and render it on links
   with score > 1; the viewport API/MCP response exposes it as `intimacy`.
+- **Named relationships**: a link's `label` (from the viewport's `linkLabels`
+  map, keyed by the edge's `role:neighborId`) is drawn on the curve's midpoint
+  with a dark backing plate; the intimacy number shifts below it when both are
+  present. Longer `notes` are inspector-only (a row's tooltip).
 
 ## How navigation works
 
@@ -226,7 +238,7 @@ SQLite file.
 
 ### MCP server (`packages/mcp`)
 
-A stdio Model Context Protocol server with 34 tools: `brain_get_root`,
+A stdio Model Context Protocol server with 35 tools: `brain_get_root`,
 `brain_get_thought`, `brain_get_card` (hover-card data), `brain_get_neighborhood`
 (optional `at=<ms>` replays the graph as of a past time — Back in Time),
 `brain_list_history` (a thought's event journal), `brain_list_recent` (timeline),
@@ -235,7 +247,8 @@ thought), `brain_navigate` (returns the
 role-grouped viewport — focus/parents/children/jumps/siblings, i.e. "what the
 UI would show"), `brain_search`, `brain_list_pinned`, `brain_list_tags`,
 `brain_create_thought`, `brain_update_thought`, `brain_delete_thought`
-(`detach` or `cascade`), `brain_link`, `brain_unlink`, `brain_set_pinned`,
+(`detach` or `cascade`), `brain_link`, `brain_link_info` (set/clear a link's
+label + notes), `brain_unlink`, `brain_set_pinned`,
 `brain_add_tag`, `brain_remove_tag`, `brain_list_attachments`,
 `brain_add_attachment`, `brain_remove_attachment`, `brain_list_sets`,
 `brain_create_set`, `brain_run_set`, `brain_delete_set` (filtered sets),
@@ -267,7 +280,7 @@ curl localhost:8788/   # prints the endpoint index
 | Read  | `GET /root` · `/thought/:id` · `/card/:id` · `/neighborhood/:id` (`?t=<ms>` = as of a past time; body carries the `hidden` More-gate and `attachCounts` badge maps) · `/history/:thoughtId?limit=` · `/earliest` · `/viewport/:id` · `/search?q=` · `/pinned` · `/recent?limit=` · `/subgraph/:id?depth=` · `/sets` · `/sets/:id/thoughts` · `/tags/:thoughtId` · `/attachments/:thoughtId` |
 | ----- | -------------------------------------------------------------------------------------------------------------------- |
 | Write | `POST /thoughts` · `PATCH /thoughts/:id` · `DELETE /thoughts/:id?mode=detach\|cascade`                               |
-| Links | `POST /links` · `DELETE /links` (body: `{fromId,toId,type}`)                                                         |
+| Links | `POST /links` · `PUT /links` (set/clear `label`/`notes`) · `DELETE /links` (body: `{fromId,toId,type}`)  |
 | Tags  | `POST /tags` · `DELETE /tags` (body: `{thoughtId,name}` / `{thoughtId,tagId}`)                                       |
 | Attach | `POST /attachments` (body: `{thoughtId,kind,uri,label?}`) · `DELETE /attachments` (body: `{thoughtId,id}`)         |
 | Sets  | `POST /sets` (body: `{name,def:{text?,type?,tag?}}`) · `DELETE /sets/:id`                                          |

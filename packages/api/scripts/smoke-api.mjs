@@ -116,6 +116,18 @@ console.log(
   nbA.attachCounts?.[created.id]?.total === 2 && nbA.attachCounts[created.id].urls === 1
 )
 
+// Named relationships: PUT /links sets label/notes; neighborhood carries them.
+const lbl = await j('PUT', '/links', {
+  fromId: root.id,
+  toId: created.id,
+  type: 'child',
+  label: 'owns',
+  notes: 'smoke note'
+})
+const nbL = (await j('GET', `/neighborhood/${created.id}`)).data
+const lblRow = nbL.links.find((l) => l.id === lbl.data?.id)
+console.log('link label ok:', lbl.data?.label === 'owns' && lblRow?.notes === 'smoke note')
+
 // Attachment full text: search hits the CONTENT of an attached text file.
 const txt = `/tmp/brain-api-smoke-${Date.now()}.md`
 writeFileSync(txt, 'Contains the coined word flibberzanz for smoke tests.\n')

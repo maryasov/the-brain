@@ -65,6 +65,10 @@ export interface Link {
   toId: string;
   type: LinkType;
   createdAt: number;
+  /** Optional relationship name drawn along the edge ("causes", "funds"…). */
+  label: string | null;
+  /** Free-form notes about the relationship itself (inspector-only). */
+  notes: string | null;
 }
 
 export interface LinkRow {
@@ -73,6 +77,19 @@ export interface LinkRow {
   to_id: string;
   type: LinkType;
   created_at: number;
+  label: string | null;
+  notes: string | null;
+}
+
+/**
+ * How one neighbor is connected to the focus, keyed by neighbor thought id
+ * in the viewport. Carries the link row's identity so the inspector can
+ * edit label/notes without re-querying.
+ */
+export interface LinkInfo {
+  id: string;
+  label: string | null;
+  notes: string | null;
 }
 
 /** A search hit from the FTS index. */
@@ -283,6 +300,18 @@ export interface LinkInput {
   fromId: string;
   toId: string;
   type: LinkType;
+  label?: string | null;
+  notes?: string | null;
+}
+
+/** Update a link's label/notes, addressed by the same triple as unlink. */
+export interface LinkInfoInput {
+  fromId: string;
+  toId: string;
+  type: LinkType;
+  /** Omitted = leave unchanged; null = clear. */
+  label?: string | null;
+  notes?: string | null;
 }
 
 /**
@@ -337,6 +366,8 @@ export interface BrainApi {
   deleteThought(id: string, options: DeleteOptions): Promise<void>;
   link(input: LinkInput): Promise<Link>;
   unlink(fromId: string, toId: string, type: LinkType): Promise<void>;
+  /** Set/clear a link's label and notes; resolves null if no such link. */
+  setLinkInfo(input: LinkInfoInput): Promise<Link | null>;
   search(query: string): Promise<SearchHit[]>;
   getOrCreateRoot(): Promise<Thought>;
   /** Most recently touched thoughts (TheBrain "Quiet Eye" timeline). */
@@ -385,6 +416,7 @@ export const IPC = {
   deleteThought: 'brain:deleteThought',
   link: 'brain:link',
   unlink: 'brain:unlink',
+  setLinkInfo: 'brain:setLinkInfo',
   search: 'brain:search',
   getOrCreateRoot: 'brain:getOrCreateRoot',
   listRecent: 'brain:listRecent',
@@ -431,7 +463,9 @@ export function rowToLink(row: LinkRow): Link {
     fromId: row.from_id,
     toId: row.to_id,
     type: row.type,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    label: row.label ?? null,
+    notes: row.notes ?? null
   };
 }
 
